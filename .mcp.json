@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "browser": {
+      "command": "node",
+      "args": ["dist/browser/mcp-server.js"],
+      "env": {
+        "CHROME_DEBUGGING_PORT": "9222"
+      }
+    }
+  }
+}

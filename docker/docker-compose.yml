@@ -1,0 +1,36 @@
+services:
+  mugi-claw:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    env_file: ../.env
+    volumes:
+      - ~/.claude:/home/mugiclaw/.claude:ro
+      - ~/.mugi-claw:/home/mugiclaw/.mugi-claw
+    depends_on:
+      chrome:
+        condition: service_healthy
+    restart: unless-stopped
+
+  chrome:
+    image: zenika/alpine-chrome:latest
+    command: >
+      --remote-debugging-port=9222
+      --remote-debugging-address=0.0.0.0
+      --user-data-dir=/data
+      --no-first-run
+      --no-default-browser-check
+      --disable-background-timer-throttling
+    volumes:
+      - chrome-data:/data
+    ports:
+      - "127.0.0.1:9222:9222"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9222/json/version"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  chrome-data:

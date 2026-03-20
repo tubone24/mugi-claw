@@ -118,23 +118,7 @@ export function registerMentionHandler(
         }
       });
 
-      runner.on('tool_result', async (ev) => {
-        // スクリーンショットのtool_resultを検出してSlackにアップロード
-        if (ev.tool.toLowerCase().includes('screenshot') && ev.success && ev.output) {
-          try {
-            // MCP desktop_screenshotはファイルパスを返す（screenshot_path:/tmp/...）
-            const pathMatch = ev.output.match(/screenshot_path:(.+)/);
-            if (pathMatch?.[1]) {
-              await threadManager.uploadFile(pathMatch[1].trim(), 'screenshot');
-            } else {
-              // base64データの場合（browser_screenshot等）
-              await threadManager.uploadScreenshot(ev.output, `screenshot_${Date.now()}.png`);
-            }
-          } catch (err) {
-            logger.warn({ err }, 'スクリーンショットアップロード失敗');
-          }
-        }
-      });
+      // desktop_screenshotはMCPサーバー内で直接Slackにアップロードされる
 
       runner.on('text', async (ev) => {
         await threadManager.updateProgress({

@@ -14,10 +14,10 @@ APPROVAL_URL="http://127.0.0.1:${APPROVAL_PORT}/api/approval"
 # Read tool info from stdin
 INPUT=$(cat)
 
-# ツール名を取得（macOS BSD grep/sed 互換のパターン）
+# ツール名を取得（macOS BSD grep/sed 互換）
 TOOL_NAME=$(echo "$INPUT" | grep -oE '"tool_name" *: *"[^"]+"' | head -1 | sed 's/"tool_name" *: *"//' | sed 's/"//')
 
-# 低リスクツールは承認不要で自動許可
+# --- 自動承認ルール ---
 case "$TOOL_NAME" in
   # Claude内部ツール（読み取り系）
   ToolSearch|Read|Glob|Grep|WebSearch|WebFetch|NotebookEdit)
@@ -31,12 +31,39 @@ case "$TOOL_NAME" in
   mcp__browser__browser_screenshot|mcp__browser__browser_get_text|mcp__browser__browser_wait|mcp__browser__browser_navigate|mcp__browser__browser_evaluate)
     exit 0
     ;;
+  # Bashコマンド（内容で判定）
+  Bash)
+    # コマンド内容を取得
+    BASH_CMD=$(echo "$INPUT" | grep -oE '"command" *: *"[^"]*"' | head -1 | sed 's/"command" *: *"//' | sed 's/"$//')
+
+    # 危険なコマンドパターン（これに該当したら承認を求める）
+    if echo "$BASH_CMD" | grep -qE '(^| )(sudo |rm |rm$|rmdir |mv |chmod |chown |kill |pkill |killall )'; then
+      break  # 承認フローへ
+    fi
+    if echo "$BASH_CMD" | grep -qE '(git (push|commit|reset|rebase|merge|checkout \.|restore \.))|( --force| -f$)'; then
+      break
+    fi
+    if echo "$BASH_CMD" | grep -qE '(npm (install|uninstall|run)|brew (install|uninstall|remove)|pip (install|uninstall))'; then
+      break
+    fi
+    if echo "$BASH_CMD" | grep -qE '(launchctl |shutdown |reboot )'; then
+      break
+    fi
+    # 上記に該当しなければ自動承認（read系・情報取得系）
+    exit 0
+    ;;
+  # Write/Editは常に承認が必要
+  Write|Edit)
+    break
+    ;;
 esac
 
-# 高リスクツールはSlackで承認を求める
-# - デスクトップ: click, right_click, double_click, type, key, hotkey, scroll, open_app
-# - ブラウザ: click, type
-# - その他: Bash, Write, Edit
+# --- 承認が必要なツール: Slackで承認を求める ---
+# 高リスク:
+#   デスクトップ: click, right_click, double_click, type, key, hotkey, scroll, open_app
+#   ブラウザ: click, type
+#   Bash: 危険コマンド
+#   Write, Edit
 
 # スレッド情報を追加（環境変数から取得）
 if [ -n "$APPROVAL_CHANNEL" ] && [ -n "$APPROVAL_THREAD_TS" ]; then

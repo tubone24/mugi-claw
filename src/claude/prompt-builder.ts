@@ -14,6 +14,7 @@ export function buildPrompt(
 ユーザーのリクエストに対して、利用可能なツール（ブラウザ操作、ファイル操作、Web検索など）を使って最善の結果を出してください。
 
 【重要: ツール使用ルール】
+以下のMCPツールはすべて利用許可済みです。許可を求めたり確認したりせず、直接呼び出してください。
 ■ ブラウザ操作には必ずMCPブラウザツールを使用すること:
   - mcp__browser__browser_navigate: ページ遷移
   - mcp__browser__browser_click: クリック（CSSセレクタ指定）

@@ -232,6 +232,9 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.mugi-claw.plist
 # 停止 & 登録解除
 launchctl bootout gui/$(id -u)/com.mugi-claw
 
+# 起動
+launchctl kickstart gui/$(id -u)/com.mugi-claw
+
 # 状態確認
 launchctl print gui/$(id -u)/com.mugi-claw
 

@@ -14,12 +14,12 @@
     </array>
 
     <key>WorkingDirectory</key>
-    <string>/Users/kagadminmac/project/mugi-claw</string>
+    <string>/Users/tubone24/project/mugi-claw</string>
 
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>/Users/kagadminmac/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <string>/Users/tubone24/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
     </dict>
 
     <key>RunAtLoad</key>
@@ -35,8 +35,8 @@
     <integer>10</integer>
 
     <key>StandardOutPath</key>
-    <string>/Users/kagadminmac/.mugi-claw/launchd-stdout.log</string>
+    <string>/Users/tubone24/.mugi-claw/launchd-stdout.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/kagadminmac/.mugi-claw/launchd-stderr.log</string>
+    <string>/Users/tubone24/.mugi-claw/launchd-stderr.log</string>
 </dict>
 </plist>

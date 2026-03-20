@@ -14,8 +14,8 @@ APPROVAL_URL="http://127.0.0.1:${APPROVAL_PORT}/api/approval"
 # Read tool info from stdin
 INPUT=$(cat)
 
-# ツール名を取得
-TOOL_NAME=$(echo "$INPUT" | grep -o '"tool_name"\s*:\s*"[^"]*"' | head -1 | sed 's/.*"tool_name"\s*:\s*"//' | sed 's/"//')
+# ツール名を取得（macOS BSD grep/sed 互換のパターン）
+TOOL_NAME=$(echo "$INPUT" | grep -oE '"tool_name" *: *"[^"]+"' | head -1 | sed 's/"tool_name" *: *"//' | sed 's/"//')
 
 # 低リスクツールは承認不要で自動許可
 case "$TOOL_NAME" in
@@ -23,15 +23,20 @@ case "$TOOL_NAME" in
   ToolSearch|Read|Glob|Grep|WebSearch|WebFetch|NotebookEdit)
     exit 0
     ;;
-  # デスクトップ（読み取り・情報取得・待機系）
+  # デスクトップ（読み取り・情報取得・待機・移動系）
   mcp__desktop__desktop_screenshot|mcp__desktop__desktop_get_screen_info|mcp__desktop__desktop_wait|mcp__desktop__desktop_mouse_move)
     exit 0
     ;;
-  # ブラウザ（読み取り系）
+  # ブラウザ（読み取り・遷移系）
   mcp__browser__browser_screenshot|mcp__browser__browser_get_text|mcp__browser__browser_wait|mcp__browser__browser_navigate|mcp__browser__browser_evaluate)
     exit 0
     ;;
 esac
+
+# 高リスクツールはSlackで承認を求める
+# - デスクトップ: click, right_click, double_click, type, key, hotkey, scroll, open_app
+# - ブラウザ: click, type
+# - その他: Bash, Write, Edit
 
 # スレッド情報を追加（環境変数から取得）
 if [ -n "$APPROVAL_CHANNEL" ] && [ -n "$APPROVAL_THREAD_TS" ]; then
@@ -51,7 +56,7 @@ if [ $CURL_EXIT -ne 0 ]; then
 fi
 
 # Check approval result
-if echo "$RESPONSE" | grep -qE '"approved"\s*:\s*true'; then
+if echo "$RESPONSE" | grep -qE '"approved" *: *true'; then
   exit 0
 else
   echo "Tool use denied by user" >&2

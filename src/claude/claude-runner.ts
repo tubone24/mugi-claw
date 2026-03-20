@@ -13,21 +13,21 @@ export class ClaudeRunner {
   ) {}
 
   /** Claude CLI を実行し、StreamParser を返す */
-  run(prompt: string, resumeSessionId?: string, model?: string): StreamParser {
+  run(prompt: string, resumeSessionId?: string, model?: string, approvalContext?: { channel: string; threadTs: string }): StreamParser {
     const parser = new StreamParser();
 
     // 同時実行制御
     if (this.activeProcesses >= this.config.claude.maxConcurrent) {
       this.logger.info('同時実行数上限 - キューに追加');
-      this.queue.push(() => this.execute(prompt, resumeSessionId, parser, model));
+      this.queue.push(() => this.execute(prompt, resumeSessionId, parser, model, approvalContext));
     } else {
-      this.execute(prompt, resumeSessionId, parser, model);
+      this.execute(prompt, resumeSessionId, parser, model, approvalContext);
     }
 
     return parser;
   }
 
-  private execute(prompt: string, resumeSessionId: string | undefined, parser: StreamParser, model?: string): void {
+  private execute(prompt: string, resumeSessionId: string | undefined, parser: StreamParser, model?: string, approvalContext?: { channel: string; threadTs: string }): void {
     this.activeProcesses++;
 
     const args = [
@@ -60,6 +60,10 @@ export class ClaudeRunner {
         ...process.env,
         MUGI_CLAW_APPROVAL: '1',
         APPROVAL_PORT: String(this.config.approval.port),
+        ...(approvalContext ? {
+          APPROVAL_CHANNEL: approvalContext.channel,
+          APPROVAL_THREAD_TS: approvalContext.threadTs,
+        } : {}),
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });

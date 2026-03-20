@@ -44,7 +44,7 @@ async function main() {
 
   // 4.5. ツール承認システム初期化
   const approvalManager = new ApprovalManager(app.client, config.owner.slackUserId, logger);
-  const approvalServer = new ApprovalServer(approvalManager, config.approval.port, logger);
+  const approvalServer = new ApprovalServer(approvalManager, app.client, config.approval.port, logger);
   await approvalServer.start();
   registerApprovalHandlers(app, approvalManager, logger);
 

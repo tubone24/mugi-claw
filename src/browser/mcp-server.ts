@@ -1,9 +1,32 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
+import { writeFile, mkdir } from 'node:fs/promises';
 import { chromium, type Browser, type Page } from 'playwright';
 
 const DEFAULT_CDP_URL = 'http://127.0.0.1:9222';
+const SCREENSHOT_DIR = '/tmp/mugi-claw/screenshots';
+const APPROVAL_PORT = process.env['APPROVAL_PORT'] ?? '3456';
+const APPROVAL_CHANNEL = process.env['APPROVAL_CHANNEL'] ?? '';
+const APPROVAL_THREAD_TS = process.env['APPROVAL_THREAD_TS'] ?? '';
+
+/** スクリーンショットを内部APIでSlackにアップロードする */
+async function uploadScreenshotToSlack(filePath: string): Promise<void> {
+  if (!APPROVAL_CHANNEL || !APPROVAL_THREAD_TS) return;
+  try {
+    await fetch(`http://127.0.0.1:${APPROVAL_PORT}/api/upload-screenshot`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        file_path: filePath,
+        channel: APPROVAL_CHANNEL,
+        thread_ts: APPROVAL_THREAD_TS,
+      }),
+    });
+  } catch {
+    // アップロード失敗は致命的ではないので無視
+  }
+}
 
 let browser: Browser | null = null;
 let page: Page | null = null;
@@ -118,12 +141,19 @@ function createServer(): McpServer {
   server.registerTool(
     'browser_screenshot',
     {
-      description: '現在のページのスクリーンショットを取得する（base64）',
+      description: '現在のページのスクリーンショットを取得する。スクリーンショットは自動的にSlackスレッドにアップロードされるため、Bashでのアップロード操作は不要。',
     },
     async () => {
       const p = await getPage();
       const buffer = await p.screenshot({ fullPage: false });
       const base64 = buffer.toString('base64');
+
+      // ファイルに保存してSlackにアップロード
+      await mkdir(SCREENSHOT_DIR, { recursive: true });
+      const filePath = `${SCREENSHOT_DIR}/browser-screenshot-${Date.now()}.png`;
+      await writeFile(filePath, buffer);
+      await uploadScreenshotToSlack(filePath);
+
       return {
         content: [
           {

@@ -1,4 +1,8 @@
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
+import { createReadStream } from 'node:fs';
+import { access } from 'node:fs/promises';
+import { basename } from 'node:path';
+import type { WebClient } from '@slack/web-api';
 import type { Logger } from 'pino';
 import type { ApprovalManager } from './approval-manager.js';
 
@@ -7,6 +11,7 @@ export class ApprovalServer {
 
   constructor(
     private approvalManager: ApprovalManager,
+    private slackClient: WebClient,
     private port: number,
     private logger: Logger,
   ) {
@@ -31,17 +36,19 @@ export class ApprovalServer {
 
   private handleRequest(req: IncomingMessage, res: ServerResponse): void {
     if (req.method === 'POST' && req.url === '/api/approval') {
-      this.handleApproval(req, res);
+      this.readBody(req, (body) => { void this.processApproval(body, res); });
+    } else if (req.method === 'POST' && req.url === '/api/upload-screenshot') {
+      this.readBody(req, (body) => { void this.processScreenshotUpload(body, res); });
     } else {
       res.writeHead(404);
       res.end('Not Found');
     }
   }
 
-  private handleApproval(req: IncomingMessage, res: ServerResponse): void {
+  private readBody(req: IncomingMessage, callback: (body: string) => void): void {
     let body = '';
     req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
-    req.on('end', () => { void this.processApproval(body, res); });
+    req.on('end', () => { callback(body); });
   }
 
   private async processApproval(body: string, res: ServerResponse): Promise<void> {
@@ -69,6 +76,35 @@ export class ApprovalServer {
       this.logger.error({ err }, '承認リクエスト処理エラー');
       res.writeHead(500);
       res.end(JSON.stringify({ error: 'Internal error' }));
+    }
+  }
+
+  private async processScreenshotUpload(body: string, res: ServerResponse): Promise<void> {
+    try {
+      const data = JSON.parse(body) as {
+        file_path: string;
+        channel: string;
+        thread_ts: string;
+      };
+
+      await access(data.file_path);
+      const fileStream = createReadStream(data.file_path);
+      const filename = basename(data.file_path);
+
+      await this.slackClient.filesUploadV2({
+        channel_id: data.channel,
+        thread_ts: data.thread_ts,
+        file: fileStream,
+        filename,
+      });
+
+      this.logger.info({ filePath: data.file_path, channel: data.channel }, 'スクリーンショットSlackアップロード完了');
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true }));
+    } catch (err) {
+      this.logger.error({ err }, 'スクリーンショットアップロードエラー');
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: 'Upload failed' }));
     }
   }
 }

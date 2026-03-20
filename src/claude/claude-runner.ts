@@ -44,7 +44,13 @@ export class ClaudeRunner {
     }
 
     if (model) {
-      args.push('--model', `claude-${model}-4-5-20251001`);
+      const modelIdMap: Record<string, string> = {
+        opus: 'claude-opus-4-6',
+        sonnet: 'claude-sonnet-4-6',
+        haiku: 'claude-haiku-4-5-20251001',
+      };
+      const modelId = modelIdMap[model] ?? `claude-${model}-4-6`;
+      args.push('--model', modelId);
     }
 
     this.logger.info({ args: args.filter((_, i) => i !== 1) }, 'Claude CLI 起動'); // promptは除外してログ

@@ -6,6 +6,10 @@
       "env": {
         "CHROME_DEBUGGING_PORT": "9222"
       }
+    },
+    "desktop": {
+      "command": "node",
+      "args": ["dist/desktop/mcp-server.js"]
     }
   }
 }

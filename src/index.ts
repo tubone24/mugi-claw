@@ -11,6 +11,9 @@ import { TaskStore } from './scheduler/task-store.js';
 import { TaskRunner } from './scheduler/task-runner.js';
 import { Scheduler } from './scheduler/scheduler.js';
 import { Notifier } from './slack/notifier.js';
+import { ApprovalManager } from './approval/approval-manager.js';
+import { ApprovalServer } from './approval/approval-server.js';
+import { registerApprovalHandlers } from './approval/register-handlers.js';
 import pino from 'pino';
 
 const config = loadConfig();
@@ -38,6 +41,12 @@ async function main() {
 
   // 4. Slack App作成
   const app = createSlackApp(config);
+
+  // 4.5. ツール承認システム初期化
+  const approvalManager = new ApprovalManager(app.client, config.owner.slackUserId, logger);
+  const approvalServer = new ApprovalServer(approvalManager, config.approval.port, logger);
+  await approvalServer.start();
+  registerApprovalHandlers(app, approvalManager, logger);
 
   // 5. Notifier, TaskRunner, Scheduler作成
   const notifier = new Notifier(app.client, config, logger);
@@ -102,6 +111,7 @@ async function main() {
   const shutdown = async () => {
     logger.info('mugi-claw を停止するわん...');
     scheduler.shutdown();
+    await approvalServer.stop();
     await app.stop();
     closeDb();
     logger.info('mugi-claw 停止完了');

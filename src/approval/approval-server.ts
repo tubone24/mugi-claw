@@ -50,13 +50,18 @@ export class ApprovalServer {
         tool_name?: string;
         tool_input?: Record<string, unknown>;
         session_id?: string;
+        approval_channel?: string;
+        approval_thread_ts?: string;
       };
       const toolName = data.tool_name ?? 'unknown';
       const toolInput = data.tool_input ?? {};
       const sessionId = data.session_id;
+      const context = (data.approval_channel && data.approval_thread_ts)
+        ? { channel: data.approval_channel, threadTs: data.approval_thread_ts }
+        : undefined;
 
       this.logger.info({ toolName }, 'ツール承認リクエスト受信');
-      const approved = await this.approvalManager.requestApproval(toolName, toolInput, sessionId);
+      const approved = await this.approvalManager.requestApproval(toolName, toolInput, sessionId, context);
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ approved }));

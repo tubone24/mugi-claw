@@ -3,9 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { join } from 'node:path';
-import { readFile, unlink } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { Monitor } from 'node-screenshots';
 
 const execFileAsync = promisify(execFile);
 const CLICLICK_PATH = process.env['CLICLICK_PATH'] ?? 'cliclick';
@@ -42,13 +40,21 @@ function createServer(): McpServer {
       description: 'デスクトップ全体のスクリーンショットを取得する（base64）',
     },
     async () => {
-      const timestamp = Date.now();
-      const tmpPath = join(tmpdir(), `mugi-desktop-${timestamp}.png`);
       try {
-        await execFileAsync('screencapture', ['-x', tmpPath]);
-        const buffer = await readFile(tmpPath);
-        const base64 = buffer.toString('base64');
-        await unlink(tmpPath).catch(() => {});
+        const monitors = Monitor.all();
+        if (monitors.length === 0) {
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: 'スクリーンショット取得エラー: モニターが見つかりません',
+              },
+            ],
+          };
+        }
+        const image = await monitors[0]!.captureImage();
+        const pngBuffer = await image.toPng();
+        const base64 = Buffer.from(pngBuffer).toString('base64');
         return {
           content: [
             {
@@ -59,7 +65,6 @@ function createServer(): McpServer {
           ],
         };
       } catch (err) {
-        await unlink(tmpPath).catch(() => {});
         const message = err instanceof Error ? err.message : String(err);
         return {
           content: [

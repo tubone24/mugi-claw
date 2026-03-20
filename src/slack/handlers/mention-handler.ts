@@ -96,7 +96,7 @@ export function registerMentionHandler(
       const model = settingsStore.getModel();
 
       // 7. Claude CLI 実行
-      const runner = claudeRunner.run(prompt, existingSession?.sessionId, model);
+      const runner = claudeRunner.run(prompt, existingSession?.sessionId, model, { channel: event.channel, threadTs: threadTs });
 
       // 8. ストリームイベント橋渡し
       const writtenFiles: string[] = [];

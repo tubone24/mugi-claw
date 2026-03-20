@@ -1,6 +1,7 @@
 import type { App } from '@slack/bolt';
 import type { AppConfig } from '../../types.js';
 import type { Logger } from 'pino';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { collectContext } from '../context-collector.js';
 import { ThreadManager } from '../thread-manager.js';
 import { buildPrompt } from '../../claude/prompt-builder.js';
@@ -28,7 +29,41 @@ export function registerMentionHandler(app: App, config: AppConfig, logger: Logg
       const context = await collectContext(client, event.channel, threadTs, userMessage, event.user ?? 'unknown', config.slack.userToken);
 
       // 3. プロンプト構築
-      const prompt = buildPrompt(context);
+      let prompt = buildPrompt(context);
+
+      // 3.5. 添付ファイル受信
+      const files = (event as unknown as Record<string, unknown>)['files'] as Array<{
+        url_private_download?: string;
+        name?: string;
+        filetype?: string;
+        mimetype?: string;
+      }> | undefined;
+
+      if (files && files.length > 0) {
+        const fileInfos: string[] = [];
+        for (const file of files) {
+          if (file.url_private_download) {
+            try {
+              const res = await fetch(file.url_private_download, {
+                headers: { Authorization: `Bearer ${config.slack.botToken}` },
+              });
+              if (res.ok) {
+                const tmpDir = '/tmp/mugi-claw';
+                await mkdir(tmpDir, { recursive: true });
+                const tmpPath = `${tmpDir}/${file.name ?? 'file'}`;
+                const buffer = Buffer.from(await res.arrayBuffer());
+                await writeFile(tmpPath, buffer);
+                fileInfos.push(`添付ファイル: ${file.name} (${file.filetype}) → ${tmpPath}`);
+              }
+            } catch (err) {
+              logger.warn({ err, fileName: file.name }, '添付ファイルダウンロード失敗');
+            }
+          }
+        }
+        if (fileInfos.length > 0) {
+          prompt += '\n\n--- 添付ファイル ---\n' + fileInfos.join('\n');
+        }
+      }
 
       // 4. セッション取得（あれば resume）
       const existingSession = sessionManager.getSession(threadTs);
@@ -37,6 +72,8 @@ export function registerMentionHandler(app: App, config: AppConfig, logger: Logg
       const runner = claudeRunner.run(prompt, existingSession?.sessionId);
 
       // 6. ストリームイベント橋渡し
+      const writtenFiles: string[] = [];
+
       runner.on('system_init', (ev) => {
         sessionManager.saveSession(threadTs, event.channel, ev.session_id);
       });
@@ -47,6 +84,22 @@ export function registerMentionHandler(app: App, config: AppConfig, logger: Logg
           content: `${ev.tool} を実行中...`,
           toolName: ev.tool,
         });
+
+        // Write ツールのファイルパスを記録
+        if (ev.tool === 'Write' && ev.input['file_path']) {
+          writtenFiles.push(ev.input['file_path'] as string);
+        }
+      });
+
+      runner.on('tool_result', async (ev) => {
+        // スクリーンショットのtool_resultを検出してSlackにアップロード
+        if (ev.tool.toLowerCase().includes('screenshot') && ev.success && ev.output) {
+          try {
+            await threadManager.uploadScreenshot(ev.output, `screenshot_${Date.now()}.png`);
+          } catch (err) {
+            logger.warn({ err }, 'スクリーンショットアップロード失敗');
+          }
+        }
       });
 
       runner.on('text', async (ev) => {
@@ -58,6 +111,16 @@ export function registerMentionHandler(app: App, config: AppConfig, logger: Logg
 
       runner.on('result', async (ev) => {
         await threadManager.postResult(ev.result);
+
+        // 書き込まれたファイルをアップロード
+        for (const filePath of writtenFiles) {
+          try {
+            await threadManager.uploadFile(filePath);
+          } catch (err) {
+            logger.warn({ err, filePath }, 'ファイルアップロード失敗');
+          }
+        }
+
         logger.info({
           threadTs,
           sessionId: ev.session_id,

@@ -29,7 +29,9 @@
         "groups:history",
         "channels:read",
         "groups:read",
-        "users:read"
+        "users:read",
+        "files:write",
+        "files:read"
       ],
       "user": [
         "search:read"

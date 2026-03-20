@@ -1,3 +1,6 @@
+import { createReadStream } from 'node:fs';
+import { access } from 'node:fs/promises';
+import { basename } from 'node:path';
 import type { WebClient } from '@slack/web-api';
 import type { Logger } from 'pino';
 import type { ProgressUpdate } from '../types.js';
@@ -132,6 +135,43 @@ export class ThreadManager {
       Glob: '\u{1F4C2}',
     };
     return emojiMap[toolName] ?? '\u2699\uFE0F';
+  }
+
+  async uploadScreenshot(base64Data: string, filename = 'screenshot.png'): Promise<void> {
+    try {
+      const buffer = Buffer.from(base64Data, 'base64');
+      await this.client.filesUploadV2({
+        channel_id: this.channel,
+        thread_ts: this.threadTs,
+        file: buffer,
+        filename,
+      });
+    } catch (err) {
+      this.logger.error({ err }, 'スクリーンショットのアップロード失敗');
+    }
+  }
+
+  async uploadFile(filePath: string, comment?: string): Promise<void> {
+    try {
+      await access(filePath);
+    } catch {
+      this.logger.error({ filePath }, 'ファイルが存在しないわん');
+      return;
+    }
+
+    try {
+      const fileStream = createReadStream(filePath);
+      const filename = basename(filePath);
+      await this.client.filesUploadV2({
+        channel_id: this.channel,
+        thread_ts: this.threadTs,
+        file: fileStream,
+        filename,
+        initial_comment: comment,
+      });
+    } catch (err) {
+      this.logger.error({ err, filePath }, 'ファイルのアップロード失敗');
+    }
   }
 
   private splitMessage(text: string): string[] {

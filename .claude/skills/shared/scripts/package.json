@@ -1,0 +1,13 @@
+{
+  "name": "shared-chrome-utils",
+  "version": "1.0.0",
+  "description": "Shared Chrome utilities for skills",
+  "type": "module",
+  "dependencies": {
+    "puppeteer-core": "^24.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "typescript": "^5.7.0"
+  }
+}

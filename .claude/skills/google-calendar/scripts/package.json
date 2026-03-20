@@ -1,0 +1,20 @@
+{
+  "name": "calendar-cdp",
+  "version": "1.0.0",
+  "description": "Google Calendar CDP CLI tool",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "profiles": "tsx src/index.ts profiles",
+    "events": "tsx src/index.ts events"
+  },
+  "dependencies": {
+    "commander": "^13.1.0",
+    "puppeteer-core": "^24.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

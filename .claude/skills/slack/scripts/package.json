@@ -1,0 +1,21 @@
+{
+  "name": "slack-cdp",
+  "version": "1.0.0",
+  "description": "Slack CDP CLI tool",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "channels": "tsx src/index.ts channels",
+    "messages": "tsx src/index.ts messages",
+    "search": "tsx src/index.ts search"
+  },
+  "dependencies": {
+    "commander": "^13.1.0",
+    "puppeteer-core": "^24.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

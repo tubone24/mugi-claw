@@ -25,7 +25,7 @@ export function registerMentionHandler(app: App, config: AppConfig, logger: Logg
       await threadManager.postThinking();
 
       // 2. コンテキスト収集
-      const context = await collectContext(client, event.channel, threadTs, userMessage, event.user ?? 'unknown');
+      const context = await collectContext(client, event.channel, threadTs, userMessage, event.user ?? 'unknown', config.slack.userToken);
 
       // 3. プロンプト構築
       const prompt = buildPrompt(context);

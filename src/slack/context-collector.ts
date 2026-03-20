@@ -7,12 +7,13 @@ export async function collectContext(
   threadTs: string,
   userMessage: string,
   userId: string,
+  userToken?: string,
 ): Promise<SlackContext> {
   // スレッドメッセージ取得
   const threadMessages = await getThreadMessages(client, channel, threadTs);
 
-  // 横断検索（キーワード抽出して検索）
-  const searchResults = await searchMessages(client, userMessage);
+  // 横断検索（User Tokenがあれば search.messages を使用）
+  const searchResults = await searchMessages(client, userMessage, userToken);
 
   return {
     channel,
@@ -50,11 +51,17 @@ async function getThreadMessages(
 async function searchMessages(
   client: WebClient,
   query: string,
+  userToken?: string,
 ): Promise<SearchResult[]> {
+  if (!userToken) {
+    // User Token がないと search.messages は使えない
+    return [];
+  }
+
   try {
-    // search.messages は User Token が必要なため、
-    // Bot Token では使えない場合がある。エラー時は空配列を返す。
+    // search.messages は User Token (xoxp-) が必要
     const result = await client.search.messages({
+      token: userToken,
       query,
       count: 5,
       sort: 'timestamp',

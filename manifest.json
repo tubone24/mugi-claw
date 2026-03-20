@@ -7,11 +7,11 @@
     "name": "mugi-claw",
     "description": "AIアシスタント犬むぎぼー。Claude Code CLIでタスクを実行するわん！",
     "background_color": "#F5A623",
-    "long_description": "Slackに常駐するAIアシスタント。@メンションでClaude Code CLIにタスクを委譲し、進捗をリアルタイムにスレッドに投稿します。ブラウザ操作によるGoogle連携（Gmail、Drive、Photos）にも対応。"
+    "long_description": "Slackに常駐するAIアシスタント「むぎぼー」です。@メンションでClaude Code CLIにタスクを委譲し、進捗をリアルタイムにスレッドに投稿します。Playwright + Chrome DevTools Protocolによるブラウザ操作で、Gmail検索・送信、Google Drive閲覧・作成、Google Photos管理、汎用Webブラウジングに対応。ログインセッションを維持したまま、APIキー不要でGoogle各サービスをブラウザUI経由で直接操作できます。"
   },
   "features": {
     "bot_user": {
-      "display_name": "むぎぼー",
+      "display_name": "mugibow",
       "always_online": true
     },
     "app_home": {
@@ -29,8 +29,10 @@
         "groups:history",
         "channels:read",
         "groups:read",
-        "search:read",
         "users:read"
+      ],
+      "user": [
+        "search:read"
       ]
     }
   },

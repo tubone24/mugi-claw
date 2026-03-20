@@ -5,6 +5,7 @@ const envSchema = z.object({
   SLACK_BOT_TOKEN: z.string().startsWith('xoxb-'),
   SLACK_APP_TOKEN: z.string().startsWith('xapp-'),
   SLACK_SIGNING_SECRET: z.string().min(1),
+  SLACK_USER_TOKEN: z.string().startsWith('xoxp-').optional(),
   CLAUDE_CLI_PATH: z.string().default('claude'),
   CLAUDE_MAX_CONCURRENT: z.coerce.number().int().min(1).max(10).default(3),
   CLAUDE_MAX_TURNS: z.coerce.number().int().min(1).max(200).default(50),
@@ -21,6 +22,7 @@ export function loadConfig(): AppConfig {
       botToken: env.SLACK_BOT_TOKEN,
       appToken: env.SLACK_APP_TOKEN,
       signingSecret: env.SLACK_SIGNING_SECRET,
+      userToken: env.SLACK_USER_TOKEN,
     },
     claude: {
       cliPath: env.CLAUDE_CLI_PATH,

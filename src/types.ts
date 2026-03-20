@@ -90,6 +90,7 @@ export interface AppConfig {
     botToken: string;
     appToken: string;
     signingSecret: string;
+    userToken?: string;
   };
   claude: {
     cliPath: string;

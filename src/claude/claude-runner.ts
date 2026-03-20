@@ -53,16 +53,22 @@ export class ClaudeRunner {
       parser.attach(child.stdout);
     }
 
+    child.stdout?.on('data', (data: Buffer) => {
+      this.logger.debug({ stdout: data.toString().slice(0, 200) }, 'Claude CLI stdout chunk');
+    });
+
     child.stderr?.on('data', (data: Buffer) => {
-      this.logger.debug({ stderr: data.toString() }, 'Claude CLI stderr');
+      this.logger.warn({ stderr: data.toString() }, 'Claude CLI stderr');
     });
 
     child.on('error', (err) => {
+      this.logger.error({ err }, 'Claude CLI spawn error');
       parser.emit('error', err);
       this.onProcessEnd();
     });
 
     child.on('close', (code) => {
+      this.logger.info({ code }, 'Claude CLI プロセス終了');
       if (code !== 0 && code !== null) {
         parser.emit('error', new Error(`Claude CLI exited with code ${code}`));
       }

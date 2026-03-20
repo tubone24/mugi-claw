@@ -158,6 +158,9 @@ export interface AppConfig {
   db: {
     path: string;
   };
+  approval: {
+    port: number;
+  };
   owner: {
     slackUserId: string;
   };

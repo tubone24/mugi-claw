@@ -9,6 +9,7 @@ const envSchema = z.object({
   CLAUDE_CLI_PATH: z.string().default('claude'),
   CLAUDE_MAX_CONCURRENT: z.coerce.number().int().min(1).max(10).default(3),
   CLAUDE_MAX_TURNS: z.coerce.number().int().min(1).max(200).default(50),
+  APPROVAL_PORT: z.coerce.number().int().default(3456),
   CHROME_DEBUGGING_PORT: z.coerce.number().int().default(9222),
   CHROME_USER_DATA_DIR: z.string().default('~/.mugi-claw/chrome-profile'),
   DB_PATH: z.string().default('~/.mugi-claw/mugi-claw.db'),
@@ -37,6 +38,9 @@ export function loadConfig(): AppConfig {
     },
     db: {
       path: env.DB_PATH,
+    },
+    approval: {
+      port: env.APPROVAL_PORT,
     },
     owner: {
       slackUserId: env.OWNER_SLACK_USER_ID,

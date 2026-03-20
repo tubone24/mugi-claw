@@ -56,7 +56,11 @@ export class ClaudeRunner {
     this.logger.info({ args: args.filter((_, i) => i !== 1) }, 'Claude CLI 起動'); // promptは除外してログ
 
     const child = spawn(this.config.claude.cliPath, args, {
-      env: { ...process.env },
+      env: {
+        ...process.env,
+        MUGI_CLAW_APPROVAL: '1',
+        APPROVAL_PORT: String(this.config.approval.port),
+      },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 

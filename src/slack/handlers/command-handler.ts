@@ -1,0 +1,93 @@
+import type { App } from '@slack/bolt';
+import type { Logger } from 'pino';
+import type { ProfileStore } from '../../profile/profile-store.js';
+import type { TaskStore } from '../../scheduler/task-store.js';
+import type { Scheduler } from '../../scheduler/scheduler.js';
+import type { SettingsStore } from '../../db/settings-store.js';
+import { handleProfileCommand } from './commands/profile-commands.js';
+import { handleScheduleCommand } from './commands/schedule-commands.js';
+import { handleMemoryCommand } from './commands/memory-commands.js';
+import { handleModelCommand } from './commands/model-commands.js';
+
+export function registerCommandHandler(
+  app: App,
+  profileStore: ProfileStore,
+  taskStore: TaskStore,
+  scheduler: Scheduler,
+  settingsStore: SettingsStore,
+  logger: Logger,
+): void {
+  app.command('/mugiclaw', async ({ command, ack, respond }) => {
+    await ack();
+
+    const args = command.text.trim().split(/\s+/);
+    const subcommand = args[0]?.toLowerCase() ?? 'help';
+    const subArgs = args.slice(1);
+
+    try {
+      switch (subcommand) {
+        case 'profile':
+          await respond(handleProfileCommand(subArgs, command.user_id, profileStore));
+          break;
+        case 'schedule':
+          await respond(await handleScheduleCommand(subArgs, taskStore, scheduler, settingsStore));
+          break;
+        case 'run': {
+          const taskName = subArgs.join(' ');
+          if (!taskName) {
+            await respond('使い方: `/mugiclaw run <タスク名>` わん');
+            break;
+          }
+          const task = taskStore.getTaskByName(taskName);
+          if (!task) {
+            await respond(`タスク「${taskName}」が見つからないわん`);
+            break;
+          }
+          await respond(`タスク「${taskName}」を実行するわん！`);
+          void scheduler.runNow(task.id);
+          break;
+        }
+        case 'memories':
+        case 'memory':
+          await respond(handleMemoryCommand(subArgs, command.user_id, profileStore));
+          break;
+        case 'model':
+          await respond(handleModelCommand(subArgs, settingsStore));
+          break;
+        case 'help':
+        default:
+          await respond(getHelpText());
+          break;
+      }
+    } catch (err) {
+      logger.error({ err, command: command.text }, 'コマンド実行エラー');
+      await respond('エラーが発生したわん... もう一度試してほしいわん');
+    }
+  });
+}
+
+function getHelpText(): string {
+  return `*:dog: むぎぼーコマンド一覧わん！*
+
+*プロフィール*
+\`/mugiclaw profile\` - プロフィール表示
+\`/mugiclaw profile set <field> <value>\` - プロフィール更新
+
+*スケジュール*
+\`/mugiclaw schedule list\` - スケジュール一覧
+\`/mugiclaw schedule add <名前> <cron式> <プロンプト>\` - スケジュール追加
+\`/mugiclaw schedule remove <名前>\` - スケジュール削除
+\`/mugiclaw schedule pause <名前>\` - 一時停止/再開
+
+*タスク実行*
+\`/mugiclaw run <名前>\` - タスク即時実行
+
+*メモリ*
+\`/mugiclaw memories\` - 記憶一覧
+\`/mugiclaw memory add <テキスト>\` - 記憶追加
+\`/mugiclaw memory forget <ID>\` - 記憶削除
+
+*モデル*
+\`/mugiclaw model\` - 現在のモデル表示
+\`/mugiclaw model <opus|sonnet|haiku>\` - モデル切替`;
+}

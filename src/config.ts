@@ -11,6 +11,8 @@ const envSchema = z.object({
   CLAUDE_MAX_TURNS: z.coerce.number().int().min(1).max(200).default(50),
   CHROME_DEBUGGING_PORT: z.coerce.number().int().default(9222),
   CHROME_USER_DATA_DIR: z.string().default('~/.mugi-claw/chrome-profile'),
+  DB_PATH: z.string().default('~/.mugi-claw/mugi-claw.db'),
+  OWNER_SLACK_USER_ID: z.string().min(1),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 });
@@ -32,6 +34,12 @@ export function loadConfig(): AppConfig {
     browser: {
       debuggingPort: env.CHROME_DEBUGGING_PORT,
       userDataDir: env.CHROME_USER_DATA_DIR,
+    },
+    db: {
+      path: env.DB_PATH,
+    },
+    owner: {
+      slackUserId: env.OWNER_SLACK_USER_ID,
     },
     logLevel: env.LOG_LEVEL,
   };

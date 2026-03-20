@@ -1,6 +1,11 @@
-import type { SlackContext } from '../types.js';
+import type { SlackContext, UserProfile, UserMemory, ScheduledTask } from '../types.js';
 
-export function buildPrompt(context: SlackContext): string {
+export function buildPrompt(
+  context: SlackContext,
+  profile: UserProfile | null = null,
+  memories: UserMemory[] = [],
+  scheduledTasks: ScheduledTask[] = [],
+): string {
   const parts: string[] = [];
 
   // システム指示
@@ -13,6 +18,72 @@ export function buildPrompt(context: SlackContext): string {
 - 上記ディレクトリ内のファイル操作（作成・編集・削除）は自由に行ってよい
 - Web検索、Webページ取得、ブラウザ操作は自由に行ってよい
 - Bashコマンドは自由に実行してよい（ただし上記の削除制限は厳守）`);
+
+  // ユーザープロフィール
+  if (profile) {
+    parts.push('\n【ユーザープロフィール】');
+    if (profile.displayName) parts.push(`名前: ${profile.displayName}`);
+    if (profile.location) parts.push(`場所: ${profile.location}`);
+    parts.push(`タイムゾーン: ${profile.timezone}`);
+    if (profile.hobbies.length > 0) parts.push(`趣味: ${profile.hobbies.join(', ')}`);
+    if (profile.favoriteFoods.length > 0) parts.push(`好きな食べ物: ${profile.favoriteFoods.join(', ')}`);
+    if (profile.interests.length > 0) parts.push(`興味・関心: ${profile.interests.join(', ')}`);
+    const customKeys = Object.keys(profile.customData);
+    if (customKeys.length > 0) {
+      for (const key of customKeys) {
+        parts.push(`${key}: ${String(profile.customData[key])}`);
+      }
+    }
+  }
+
+  // ユーザーについての記憶
+  if (memories.length > 0) {
+    parts.push('\n【ユーザーについての記憶】');
+    for (const mem of memories) {
+      parts.push(`- [${mem.category}] ${mem.content}`);
+    }
+  }
+
+  // スケジュール一覧
+  if (scheduledTasks.length > 0) {
+    parts.push('\n【現在のスケジュール一覧】');
+    for (const task of scheduledTasks) {
+      const status = task.enabled ? '有効' : '停止中';
+      parts.push(`- ${task.name} (${task.cronExpression}) [${status}]: ${task.taskPrompt}`);
+    }
+  }
+
+  // 構造化出力ルール
+  parts.push(`
+【構造化出力ルール】
+会話の中でユーザーについて新しい事実・好み・習慣を学んだ場合、応答の末尾に以下の形式で記録してください:
+
+[MEMORY_SAVE]
+category: preference|fact|habit|context
+content: 記憶する内容
+[/MEMORY_SAVE]
+
+ユーザーがプロフィール情報を更新したい場合:
+
+[PROFILE_UPDATE]
+displayName: 新しい名前
+location: 新しい場所
+hobbies: 趣味1, 趣味2
+favoriteFoods: 食べ物1, 食べ物2
+interests: 興味1, 興味2
+[/PROFILE_UPDATE]
+
+ユーザーがスケジュールタスクの追加・削除・一時停止を依頼した場合:
+
+[SCHEDULE_ACTION]
+action: add|remove|pause|resume
+name: タスク名
+cron: cron式(addの場合)
+prompt: タスクのプロンプト(addの場合)
+description: タスクの説明(addの場合、任意)
+[/SCHEDULE_ACTION]
+
+※これらのブロックはシステムが処理し、ユーザーには表示されません。`);
 
   // スレッドコンテキスト
   if (context.threadMessages.length > 1) {

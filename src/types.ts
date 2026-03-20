@@ -84,6 +84,60 @@ export interface ProgressUpdate {
   toolName?: string;
 }
 
+// パーソナライズ
+export interface UserProfile {
+  slackUserId: string;
+  displayName?: string;
+  location?: string;
+  timezone: string;
+  hobbies: string[];
+  favoriteFoods: string[];
+  interests: string[];
+  customData: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UserMemory {
+  id: number;
+  slackUserId: string;
+  category: 'preference' | 'fact' | 'habit' | 'context';
+  content: string;
+  source: 'conversation' | 'profile_setup' | 'explicit';
+  createdAt: string;
+  updatedAt: string;
+}
+
+// スケジュールタスク
+export interface ScheduledTask {
+  id: string;
+  name: string;
+  description?: string;
+  cronExpression: string;
+  taskPrompt: string;
+  enabled: boolean;
+  notifyChannel?: string;
+  notifyType: 'dm' | 'channel';
+  model?: string;
+  createdAt: string;
+  updatedAt: string;
+  lastRunAt?: string;
+  lastStatus?: string;
+  lastError?: string;
+}
+
+export interface TaskRun {
+  id: number;
+  taskId: string;
+  startedAt: string;
+  finishedAt?: string;
+  status: 'running' | 'success' | 'error';
+  resultSummary?: string;
+  errorMessage?: string;
+  costUsd?: number;
+  durationMs?: number;
+}
+
 // Config
 export interface AppConfig {
   slack: {
@@ -100,6 +154,12 @@ export interface AppConfig {
   browser: {
     debuggingPort: number;
     userDataDir: string;
+  };
+  db: {
+    path: string;
+  };
+  owner: {
+    slackUserId: string;
   };
   logLevel: string;
 }

@@ -13,21 +13,21 @@ export class ClaudeRunner {
   ) {}
 
   /** Claude CLI を実行し、StreamParser を返す */
-  run(prompt: string, resumeSessionId?: string): StreamParser {
+  run(prompt: string, resumeSessionId?: string, model?: string): StreamParser {
     const parser = new StreamParser();
 
     // 同時実行制御
     if (this.activeProcesses >= this.config.claude.maxConcurrent) {
       this.logger.info('同時実行数上限 - キューに追加');
-      this.queue.push(() => this.execute(prompt, resumeSessionId, parser));
+      this.queue.push(() => this.execute(prompt, resumeSessionId, parser, model));
     } else {
-      this.execute(prompt, resumeSessionId, parser);
+      this.execute(prompt, resumeSessionId, parser, model);
     }
 
     return parser;
   }
 
-  private execute(prompt: string, resumeSessionId: string | undefined, parser: StreamParser): void {
+  private execute(prompt: string, resumeSessionId: string | undefined, parser: StreamParser, model?: string): void {
     this.activeProcesses++;
 
     const args = [
@@ -41,6 +41,10 @@ export class ClaudeRunner {
 
     if (resumeSessionId) {
       args.push('--resume', resumeSessionId);
+    }
+
+    if (model) {
+      args.push('--model', `claude-${model}-4-5-20251001`);
     }
 
     this.logger.info({ args: args.filter((_, i) => i !== 1) }, 'Claude CLI 起動'); // promptは除外してログ

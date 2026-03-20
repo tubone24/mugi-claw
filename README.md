@@ -2,35 +2,42 @@
 
 Slack に常駐する AI アシスタント犬「むぎぼー」。@メンションで Claude Code CLI にタスクを委譲し、進捗をリアルタイムにスレッドに投稿する。Playwright + Chrome DevTools Protocol によるブラウザ操作で、Gmail / Google Drive / Google Photos などを API キー不要で直接操作できる。
 
+**主な機能:**
+- **パーソナライズ**: ユーザーごとのプロフィール・メモリ機能。会話から好みや事実を学習し、応答をパーソナライズ
+- **スケジュールタスク**: node-cron で定期タスクを自動実行（Gmail確認、レポート生成など）
+- **モデル切替**: Slack から `opus` / `sonnet` / `haiku` をグローバルに切り替え
+- **スラッシュコマンド**: `/mugiclaw` でプロフィール・スケジュール・メモリ・モデルを管理
+
 ## アーキテクチャ
 
 ```
 [Slack] @mugi-claw タスクお願い
     │
     ▼
-┌──────────────────────────────────────┐
-│  mugi-claw (Node.js / TypeScript)    │
-│  Slack Bolt App (Socket Mode)        │
-│       │                              │
-│       ├→ context-collector           │  スレッド全文 + 横断検索
-│       ├→ thread-manager              │  進捗リアルタイム投稿
-│       ▼                              │
-│  claude-runner                       │
-│  spawn("claude", [...,               │
-│    "--output-format", "stream-json"])│
-│       │                              │
-│       ▼                              │
-│  stream-parser (NDJSON → events)     │
-└──────────┬───────────────────────────┘
-           │
-           ▼
-┌──────────────────────────────────────┐
-│  MCP Server: browser-server          │
-│  Playwright → CDP → 常駐Chrome       │
-└──────────────────────────────────────┘
-           │
-           ▼
-   Gmail / Drive / Photos / 任意のWebサイト
+Slack (Socket Mode)
+  │
+  ├── @メンション ──→ mention-handler ──→ Claude Code CLI (spawn)
+  │                        │                     │
+  │                        │                     ├→ stream-json でイベント受信
+  │                        │                     └→ Playwright MCP でブラウザ操作
+  │                        │
+  │                        ├→ profile/memories 読込 (SQLite)
+  │                        └→ result-parser で構造化出力を処理
+  │
+  ├── /mugiclaw ──→ command-handler ──→ DB操作
+  │
+  ├── Block Kit ──→ profile-onboarding ──→ プロフィール登録
+  │
+  └── Scheduler (node-cron) ──→ task-runner ──→ Claude Code CLI
+                                     │
+                                     └→ Notifier (DM/チャンネル通知)
+
+SQLite (~/.mugi-claw/mugi-claw.db)
+  ├── user_profile     (マルチユーザー)
+  ├── user_memories    (ユーザーごとの記憶)
+  ├── scheduled_tasks  (定期タスク)
+  ├── task_runs        (実行履歴)
+  └── settings         (グローバル設定)
 ```
 
 ## 前提条件
@@ -77,6 +84,7 @@ cp .env.example .env
 SLACK_BOT_TOKEN=xoxb-your-token
 SLACK_APP_TOKEN=xapp-your-token
 SLACK_SIGNING_SECRET=your-signing-secret
+OWNER_SLACK_USER_ID=U01XXXXXX
 
 # 任意: 横断検索を有効にする場合
 SLACK_USER_TOKEN=xoxp-your-user-token
@@ -105,6 +113,8 @@ npm start
 | `SLACK_APP_TOKEN` | Yes | - | Slack App-Level Token (`xapp-`) |
 | `SLACK_SIGNING_SECRET` | Yes | - | Slack Signing Secret |
 | `SLACK_USER_TOKEN` | No | - | Slack User Token (`xoxp-`)。横断検索に使用 |
+| `OWNER_SLACK_USER_ID` | Yes | - | ボットオーナーの Slack User ID |
+| `DB_PATH` | No | `~/.mugi-claw/mugi-claw.db` | SQLite データベースパス |
 | `CLAUDE_CLI_PATH` | No | `claude` | Claude Code CLI のパス |
 | `CLAUDE_MAX_CONCURRENT` | No | `3` | Claude CLI の最大同時実行数 (1-10) |
 | `CLAUDE_MAX_TURNS` | No | `50` | Claude CLI の最大ターン数 (1-200) |
@@ -141,6 +151,44 @@ Gmail / Drive / Photos などの Google サービスは、API ではなくブラ
 | `photos-manage` | Google Photos 写真検索・管理 |
 | `web-browse` | 任意の Web サイト閲覧・操作 |
 
+## スラッシュコマンド
+
+| コマンド | 説明 |
+|---------|------|
+| `/mugiclaw help` | ヘルプ表示 |
+| `/mugiclaw profile` | プロフィール表示 |
+| `/mugiclaw profile set <field> <value>` | プロフィール更新 |
+| `/mugiclaw schedule list` | スケジュール一覧 |
+| `/mugiclaw schedule add <名前> <cron式> <プロンプト>` | スケジュール追加 |
+| `/mugiclaw schedule remove <名前>` | スケジュール削除 |
+| `/mugiclaw schedule pause <名前>` | 一時停止/再開 |
+| `/mugiclaw run <名前>` | タスク即時実行 |
+| `/mugiclaw memories` | 記憶一覧 |
+| `/mugiclaw memory add <テキスト>` | 記憶追加 |
+| `/mugiclaw memory forget <ID>` | 記憶削除 |
+| `/mugiclaw model` | 現在のモデル表示 |
+| `/mugiclaw model <opus\|sonnet\|haiku>` | モデル切替 |
+
+### 自然言語でのスケジュール登録
+
+メンションでも自然言語でスケジュール登録が可能:
+
+```
+@mugibow 毎朝9時にGmailを確認して未読メールを教えて
+```
+
+## データ永続化
+
+SQLite (`~/.mugi-claw/mugi-claw.db`) で以下を永続化:
+
+| テーブル | 説明 |
+|---------|------|
+| `user_profile` | ユーザーごとのプロフィール（名前、場所、趣味など） |
+| `user_memories` | 会話から学習した記憶（好み、事実、習慣） |
+| `scheduled_tasks` | 定期実行タスクの定義 |
+| `task_runs` | タスク実行履歴 |
+| `settings` | グローバル設定（Claude モデルなど） |
+
 ## Docker で起動
 
 ```bash
@@ -171,24 +219,43 @@ Docker 構成:
 
 ```
 src/
-├── index.ts                  # エントリポイント
-├── config.ts                 # 環境変数（zod バリデーション）
-├── types.ts                  # 共通型定義
-├── slack/
-│   ├── app.ts                # Slack Bolt + Socket Mode
-│   ├── handlers/
-│   │   └── mention-handler.ts  # @メンション オーケストレーター
-│   ├── context-collector.ts  # スレッド全文 + 横断検索
-│   ├── thread-manager.ts     # 進捗リアルタイム投稿
-│   └── markdown-converter.ts # Markdown → Slack mrkdwn
+├── index.ts                    # エントリポイント
+├── config.ts                   # 環境変数（Zod バリデーション）
+├── types.ts                    # 共通型定義
+├── db/
+│   ├── database.ts             # SQLite シングルトン
+│   ├── migrations.ts           # スキーマ定義
+│   └── settings-store.ts       # グローバル設定
+├── profile/
+│   ├── profile-store.ts        # プロフィール・メモリ CRUD
+│   └── profile-onboarding.ts   # 初回 DM 対話 (Block Kit)
 ├── claude/
-│   ├── claude-runner.ts      # CLI spawn + 同時実行制御
-│   ├── stream-parser.ts      # NDJSON ストリームパーサー
-│   ├── session-manager.ts    # スレッド ↔ セッション管理
-│   └── prompt-builder.ts     # プロンプト構築
+│   ├── claude-runner.ts        # CLI spawn + 同時実行制御
+│   ├── stream-parser.ts        # NDJSON ストリームパーサー
+│   ├── session-manager.ts      # スレッド ↔ セッション管理
+│   ├── prompt-builder.ts       # プロンプト構築
+│   └── result-parser.ts        # 構造化出力パーサー
+├── scheduler/
+│   ├── scheduler.ts            # node-cron 管理
+│   ├── task-store.ts           # タスク CRUD
+│   └── task-runner.ts          # タスク実行
+├── slack/
+│   ├── app.ts                  # Slack Bolt + Socket Mode
+│   ├── notifier.ts             # 結果通知 (DM/チャンネル)
+│   ├── thread-manager.ts       # 進捗リアルタイム投稿
+│   ├── context-collector.ts    # スレッド全文 + 横断検索
+│   ├── markdown-converter.ts   # Markdown → Slack mrkdwn
+│   └── handlers/
+│       ├── mention-handler.ts  # @メンション ハンドラー
+│       ├── command-handler.ts  # /mugiclaw ルーター
+│       └── commands/
+│           ├── profile-commands.ts
+│           ├── schedule-commands.ts
+│           ├── memory-commands.ts
+│           └── model-commands.ts
 └── browser/
-    ├── chrome-launcher.ts    # Chrome CDP 起動・管理
-    └── mcp-server.ts         # Playwright MCP Server
-skills/                       # Claude Code Skills（手順書）
-docker/                       # Docker 設定
+    ├── chrome-launcher.ts      # Chrome CDP 起動・管理
+    └── mcp-server.ts           # Playwright MCP Server
+skills/                         # Claude Code Skills（手順書）
+docker/                         # Docker 設定
 ```

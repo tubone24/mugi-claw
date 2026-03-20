@@ -46,7 +46,7 @@ export class ClaudeRunner {
 
     const child = spawn(this.config.claude.cliPath, args, {
       env: { ...process.env },
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
 
     if (child.stdout) {

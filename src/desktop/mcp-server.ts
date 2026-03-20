@@ -7,9 +7,30 @@ import { writeFile, mkdir } from 'node:fs/promises';
 import { Monitor } from 'node-screenshots';
 
 const SCREENSHOT_DIR = '/tmp/mugi-claw/screenshots';
+const APPROVAL_PORT = process.env['APPROVAL_PORT'] ?? '3456';
+const APPROVAL_CHANNEL = process.env['APPROVAL_CHANNEL'] ?? '';
+const APPROVAL_THREAD_TS = process.env['APPROVAL_THREAD_TS'] ?? '';
 
 const execFileAsync = promisify(execFile);
 const CLICLICK_PATH = process.env['CLICLICK_PATH'] ?? 'cliclick';
+
+/** スクリーンショットを内部APIでSlackにアップロードする */
+async function uploadScreenshotToSlack(filePath: string): Promise<void> {
+  if (!APPROVAL_CHANNEL || !APPROVAL_THREAD_TS) return;
+  try {
+    await fetch(`http://127.0.0.1:${APPROVAL_PORT}/api/upload-screenshot`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        file_path: filePath,
+        channel: APPROVAL_CHANNEL,
+        thread_ts: APPROVAL_THREAD_TS,
+      }),
+    });
+  } catch {
+    // アップロード失敗は致命的ではないので無視
+  }
+}
 
 /** cliclick のモディファイアキー名に変換する */
 function toCliclickModifier(mod: string): string {
@@ -60,10 +81,11 @@ function createServer(): McpServer {
         const buffer = Buffer.from(pngBuffer);
         const base64 = buffer.toString('base64');
 
-        // ファイルに保存（mention-handlerがSlackにアップロードする）
+        // ファイルに保存してSlackにアップロード
         await mkdir(SCREENSHOT_DIR, { recursive: true });
         const filePath = `${SCREENSHOT_DIR}/screenshot-${Date.now()}.png`;
         await writeFile(filePath, buffer);
+        await uploadScreenshotToSlack(filePath);
 
         return {
           content: [
@@ -71,10 +93,6 @@ function createServer(): McpServer {
               type: 'image' as const,
               data: base64,
               mimeType: 'image/png',
-            },
-            {
-              type: 'text' as const,
-              text: `screenshot_path:${filePath}`,
             },
           ],
         };

@@ -103,6 +103,7 @@ export function registerMentionHandler(
 
       runner.on('system_init', (ev) => {
         sessionManager.saveSession(threadTs, event.channel, ev.session_id);
+        logger.info({ tools: ev.tools, mcpServers: ev.mcp_servers }, 'Claude CLI 利用可能ツール');
       });
 
       runner.on('tool_use', async (ev) => {

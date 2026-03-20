@@ -35,7 +35,8 @@ export class ClaudeRunner {
       '--output-format', 'stream-json',
       '--max-turns', String(this.config.claude.maxTurns),
       '--verbose',
-      '--allowedTools', 'Read,Write,Edit,Bash,Glob,Grep,mcp__browser__*',
+      '--allowedTools', 'Read,Write,Edit,Bash(*),Glob,Grep,WebSearch,WebFetch,NotebookEdit,mcp__*',
+      '--mcp-config', '.mcp.json',
     ];
 
     if (resumeSessionId) {

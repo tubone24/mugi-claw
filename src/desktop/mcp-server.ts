@@ -3,7 +3,10 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { writeFile, mkdir } from 'node:fs/promises';
 import { Monitor } from 'node-screenshots';
+
+const SCREENSHOT_DIR = '/tmp/mugi-claw/screenshots';
 
 const execFileAsync = promisify(execFile);
 const CLICLICK_PATH = process.env['CLICLICK_PATH'] ?? 'cliclick';
@@ -37,7 +40,7 @@ function createServer(): McpServer {
   server.registerTool(
     'desktop_screenshot',
     {
-      description: 'デスクトップ全体のスクリーンショットを取得する（base64）',
+      description: 'デスクトップ全体のスクリーンショットを取得する。スクリーンショットは自動的にSlackスレッドにアップロードされるため、Bashでのアップロード操作は不要。',
     },
     async () => {
       try {
@@ -54,13 +57,24 @@ function createServer(): McpServer {
         }
         const image = await monitors[0]!.captureImage();
         const pngBuffer = await image.toPng();
-        const base64 = Buffer.from(pngBuffer).toString('base64');
+        const buffer = Buffer.from(pngBuffer);
+        const base64 = buffer.toString('base64');
+
+        // ファイルに保存（mention-handlerがSlackにアップロードする）
+        await mkdir(SCREENSHOT_DIR, { recursive: true });
+        const filePath = `${SCREENSHOT_DIR}/screenshot-${Date.now()}.png`;
+        await writeFile(filePath, buffer);
+
         return {
           content: [
             {
               type: 'image' as const,
               data: base64,
               mimeType: 'image/png',
+            },
+            {
+              type: 'text' as const,
+              text: `screenshot_path:${filePath}`,
             },
           ],
         };

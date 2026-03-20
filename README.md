@@ -205,6 +205,49 @@ Docker 構成:
 
 ホストの `~/.claude/`（Claude 認証情報）と `~/.mugi-claw/`（Chrome プロファイル）をマウントする。
 
+## macOS で常駐起動（launchd）
+
+macOS のサービス管理機構 `launchd` を使えば、ログイン時に自動起動・クラッシュ時に自動復旧できる。
+
+### 1. ビルド
+
+```bash
+npm run build
+```
+
+### 2. plist ファイル配置
+
+```bash
+cp launchd/com.mugi-claw.plist ~/Library/LaunchAgents/
+```
+
+> **Note**: plist 内の Node.js パスやワーキングディレクトリは環境に合わせて編集すること（`which node` で確認）。launchd はシェルの `.zshrc` を読まないため、`EnvironmentVariables` で `PATH` を明示的に指定する必要がある。Claude CLI (`~/.local/bin`) へのパスも含めること。
+
+### 3. サービス操作
+
+```bash
+# 登録 & 起動
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.mugi-claw.plist
+
+# 停止 & 登録解除
+launchctl bootout gui/$(id -u)/com.mugi-claw
+
+# 状態確認
+launchctl print gui/$(id -u)/com.mugi-claw
+
+# ログ確認
+tail -f ~/.mugi-claw/launchd-stdout.log
+tail -f ~/.mugi-claw/launchd-stderr.log
+```
+
+### 4. コード更新時
+
+```bash
+launchctl bootout gui/$(id -u)/com.mugi-claw
+npm run build
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.mugi-claw.plist
+```
+
 ## npm scripts
 
 | コマンド | 説明 |

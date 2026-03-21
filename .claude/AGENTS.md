@@ -20,6 +20,7 @@
 - `browser_get_text`: テキスト取得
 - `browser_wait`: 要素待機
 - `browser_evaluate`: JavaScript実行
+- `browser_secure_input`: 機密情報の安全な入力（パスワード・OTP等）。LLMコンテキストに機密情報を載せずにWeb UI経由でユーザーに入力してもらう
 
 ### デスクトップ操作（mcp__desktop__）
 - `desktop_screenshot`: デスクトップ全体のスクリーンショット
@@ -40,3 +41,26 @@
 - ブラウザ操作には必ずMCPブラウザツールを使用する（Bash経由のCDP操作は禁止）
 - デスクトップ操作には必ずMCPデスクトップツールを使用する
 - スクリーンショットはSlackに自動アップロードされるため、手動アップロード不要
+- **パスワード・OTP等の機密情報の入力には必ず `browser_secure_input` を使う。`browser_type` でパスワードを直接入力してはならない**
+
+## セッション切れ時のログインフロー
+セッション切れを検知した場合、以下の手順でログインする（手動ログインの案内は禁止）:
+
+1. `browser_screenshot` でログイン画面を確認
+2. `browser_get_text` でフォーム構造（セレクタ）を特定
+3. `browser_secure_input` で機密情報の入力をユーザーに依頼
+   - `site`: ログイン対象のサービス名/URL
+   - `fields`: 各入力フィールドの `selector`（CSSセレクタ）、`label`（表示名）、`sensitive`（パスワード等はtrue）
+4. 入力完了後、`browser_click` でログインボタンを押す
+5. MFA（2段階認証）が求められた場合は、再度 `browser_secure_input` でOTPの入力を依頼
+
+例:
+```
+browser_secure_input({
+  site: "x.com",
+  fields: [
+    { selector: "input[name='text']", label: "ユーザー名/メール/電話番号", sensitive: false },
+    { selector: "input[name='password']", label: "パスワード", sensitive: true }
+  ]
+})
+```

@@ -22,7 +22,7 @@
 - Chrome は `--remote-debugging-port=9222` で起動済み
 - スキルは常に `--no-launch --port 9222` で実行する
 - ブラウザ操作は常駐Chromeのログインセッションを利用する
-- セッションが切れている場合はユーザーに手動ログインを案内する
+- セッションが切れている場合は `browser_secure_input` を使ってログインする（手動ログインの案内は禁止）
 
 ## Hooks
 - **Langfuse**: 全イベントのトレーシング（`~/.claude/.env` に LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY を設定）

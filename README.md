@@ -904,28 +904,6 @@ LANGFUSE_ENVIRONMENT=development
 | LLM response | Generation | thinking + output, token counts, cost |
 | Session total | Generation | aggregated usage + cost breakdown |
 
-### Slack Webhook Notifications
-
-Sends Block Kit messages for Claude Code notification events (permission requests, etc.).
-
-Add to `~/.claude/.env`:
-
-```bash
-SLACK_WEBHOOK_URL=https://hooks.slack.com/services/T.../B.../...
-```
-
-### Obsidian Session Export
-
-Automatically exports session notes to an Obsidian vault on session end. Includes user prompts, tool usage summary, files edited/created, and commands run.
-
-Add to `~/.claude/.env`:
-
-```bash
-OBSIDIAN_VAULT_PATH=~/Documents/Obsidian\ Vault
-```
-
-Notes are saved to `{vault}/Claude-Sessions/claude-session-{timestamp}-{session_id}.md`.
-
 ## Deployment
 
 ### Docker
@@ -1064,9 +1042,7 @@ src/
 ├── hooks/                      # Claude Code event hooks
 │   ├── tool-approval.sh        # PreToolUse approval routing
 │   └── scripts/
-│       ├── langfuse-logger.sh  # Full lifecycle tracing (1176 lines)
-│       ├── slack-notify.sh     # Webhook notifications
-│       └── obsidian-export.py  # Session note export
+│       └── langfuse-logger.sh  # Full lifecycle tracing (1176 lines)
 └── skills/                     # Browser automation skill definitions
 
 scripts/                        # Guard hooks
@@ -1079,14 +1055,6 @@ sandbox/
 docker/
 ├── Dockerfile                  # Node.js 20 + Playwright deps
 └── docker-compose.yml          # mugi-claw + Chrome services
-
-skills/                         # Claude Code Skills (procedure docs)
-├── gmail-search.md
-├── gmail-send.md
-├── drive-read.md
-├── drive-create.md
-├── photos-manage.md
-└── web-browse.md
 
 launchd/
 └── com.mugi-claw.plist         # macOS persistent service config

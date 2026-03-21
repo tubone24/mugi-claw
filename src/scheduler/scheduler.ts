@@ -35,7 +35,7 @@ export class Scheduler {
   removeTask(taskId: string): void {
     const job = this.jobs.get(taskId);
     if (job) {
-      job.stop();
+      void job.stop();
       this.jobs.delete(taskId);
       this.logger.info({ taskId }, 'cronジョブ削除');
     }
@@ -66,7 +66,7 @@ export class Scheduler {
   /** Stop all cron jobs */
   shutdown(): void {
     for (const [taskId, job] of this.jobs) {
-      job.stop();
+      void job.stop();
       this.logger.debug({ taskId }, 'cronジョブ停止');
     }
     this.jobs.clear();

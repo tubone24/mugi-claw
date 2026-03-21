@@ -153,6 +153,7 @@ export interface AppConfig {
     cliPath: string;
     maxConcurrent: number;
     maxTurns: number;
+    maxRetries: number;
   };
   browser: {
     debuggingPort: number;

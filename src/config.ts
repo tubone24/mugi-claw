@@ -9,6 +9,7 @@ const envSchema = z.object({
   CLAUDE_CLI_PATH: z.string().default('claude'),
   CLAUDE_MAX_CONCURRENT: z.coerce.number().int().min(1).max(10).default(3),
   CLAUDE_MAX_TURNS: z.coerce.number().int().min(1).max(200).default(50),
+  CLAUDE_MAX_RETRIES: z.coerce.number().int().min(0).max(10).default(3),
   APPROVAL_PORT: z.coerce.number().int().default(3456),
   CREDENTIAL_PORT: z.coerce.number().int().default(3457),
   CHROME_DEBUGGING_PORT: z.coerce.number().int().default(9222),
@@ -36,6 +37,7 @@ export function loadConfig(): AppConfig {
       cliPath: env.CLAUDE_CLI_PATH,
       maxConcurrent: env.CLAUDE_MAX_CONCURRENT,
       maxTurns: env.CLAUDE_MAX_TURNS,
+      maxRetries: env.CLAUDE_MAX_RETRIES,
     },
     browser: {
       debuggingPort: env.CHROME_DEBUGGING_PORT,

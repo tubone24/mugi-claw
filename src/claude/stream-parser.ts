@@ -8,6 +8,7 @@ interface StreamParserEvents {
   tool_use: (event: { tool: string; input: Record<string, unknown> }) => void;
   tool_result: (event: { tool: string; output: string; success: boolean }) => void;
   result: (event: { result: string; session_id: string; cost_usd: number; duration_ms: number; num_turns: number }) => void;
+  retry: (event: { attempt: number; maxRetries: number; error: string; delayMs: number }) => void;
   error: (error: Error) => void;
 }
 
@@ -26,6 +27,12 @@ export class StreamParser extends EventEmitter {
   }
   override emit<K extends keyof StreamParserEvents>(event: K, ...args: Parameters<StreamParserEvents[K]>): boolean {
     return super.emit(event, ...args);
+  }
+
+  /** Reset parser state for retry */
+  reset(): void {
+    this.buffer = '';
+    this.receivedSubtypedAssistant = false;
   }
 
   /** Readable ストリーム（stdout）を接続してパースを開始 */

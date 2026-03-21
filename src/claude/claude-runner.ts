@@ -19,113 +19,177 @@ export class ClaudeRunner {
     // 同時実行制御
     if (this.activeProcesses >= this.config.claude.maxConcurrent) {
       this.logger.info('同時実行数上限 - キューに追加');
-      this.queue.push(() => this.execute(prompt, resumeSessionId, parser, model, approvalContext));
+      this.queue.push(() => void this.executeWithRetry(prompt, resumeSessionId, parser, model, approvalContext));
     } else {
-      this.execute(prompt, resumeSessionId, parser, model, approvalContext);
+      void this.executeWithRetry(prompt, resumeSessionId, parser, model, approvalContext);
     }
 
     return parser;
   }
 
-  private execute(prompt: string, resumeSessionId: string | undefined, parser: StreamParser, model?: string, approvalContext?: { channel: string; threadTs: string }): void {
+  private async executeWithRetry(
+    prompt: string,
+    resumeSessionId: string | undefined,
+    parser: StreamParser,
+    model?: string,
+    approvalContext?: { channel: string; threadTs: string },
+  ): Promise<void> {
     this.activeProcesses++;
+    const maxRetries = this.config.claude.maxRetries;
 
-    const args = [
-      '-p', prompt,
-      '--output-format', 'stream-json',
-      '--max-turns', String(this.config.claude.maxTurns),
-      '--verbose',
-      '--allowedTools',
-      'Read', 'Write', 'Edit', 'Bash(*)', 'Glob', 'Grep',
-      'WebSearch', 'WebFetch', 'NotebookEdit',
-      'mcp__browser__browser_navigate', 'mcp__browser__browser_click',
-      'mcp__browser__browser_type', 'mcp__browser__browser_screenshot',
-      'mcp__browser__browser_get_text', 'mcp__browser__browser_wait',
-      'mcp__browser__browser_evaluate',
-      'mcp__browser__browser_secure_input',
-      'mcp__desktop__desktop_screenshot', 'mcp__desktop__desktop_click',
-      'mcp__desktop__desktop_right_click', 'mcp__desktop__desktop_double_click',
-      'mcp__desktop__desktop_type', 'mcp__desktop__desktop_key',
-      'mcp__desktop__desktop_hotkey', 'mcp__desktop__desktop_mouse_move',
-      'mcp__desktop__desktop_scroll', 'mcp__desktop__desktop_get_screen_info',
-      'mcp__desktop__desktop_open_app', 'mcp__desktop__desktop_wait',
-      'TaskCreate', 'TaskUpdate', 'TaskGet', 'TaskList', 'TaskStop', 'TaskOutput',
-      '--mcp-config', '.mcp.json',
-    ];
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        await this.execute(prompt, resumeSessionId, parser, model, approvalContext);
+        this.onProcessEnd();
+        return; // Success
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err));
 
-    if (resumeSessionId) {
-      args.push('--resume', resumeSessionId);
-    }
-
-    if (model) {
-      const modelIdMap: Record<string, string> = {
-        opus: 'claude-opus-4-6',
-        sonnet: 'claude-sonnet-4-6',
-        haiku: 'claude-haiku-4-5-20251001',
-      };
-      const modelId = modelIdMap[model] ?? `claude-${model}-4-6`;
-      args.push('--model', modelId);
-    }
-
-    this.logger.info({ args: args.filter((_, i) => i !== 1) }, 'Claude CLI 起動'); // promptは除外してログ
-
-    // Sandbox mode: wrap with sandbox-exec
-    const command = this.config.sandbox.enabled
-      ? 'sandbox-exec'
-      : this.config.claude.cliPath;
-
-    const spawnArgs = this.config.sandbox.enabled
-      ? ['-f', this.config.sandbox.profile, this.config.claude.cliPath, ...args]
-      : args;
-
-    // Add proxy env vars when sandbox is enabled
-    const proxyEnv = this.config.sandbox.enabled
-      ? {
-          HTTP_PROXY: `http://localhost:${this.config.network.proxyPort}`,
-          HTTPS_PROXY: `http://localhost:${this.config.network.proxyPort}`,
+        // Don't retry on intentional signals
+        if (this.isNonRetryable(error)) {
+          parser.emit('error', error);
+          this.onProcessEnd();
+          return;
         }
-      : {};
 
-    const child = spawn(command, spawnArgs, {
-      env: {
-        ...process.env,
-        ...proxyEnv,
-        MUGI_CLAW_APPROVAL: '1',
-        APPROVAL_PORT: String(this.config.approval.port),
-        ...(approvalContext ? {
-          APPROVAL_CHANNEL: approvalContext.channel,
-          APPROVAL_THREAD_TS: approvalContext.threadTs,
-        } : {}),
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-
-    if (child.stdout) {
-      parser.attach(child.stdout);
-    }
-
-    child.stdout?.on('data', (data: Buffer) => {
-      this.logger.debug({ stdout: data.toString().slice(0, 200) }, 'Claude CLI stdout chunk');
-    });
-
-    child.stderr?.on('data', (data: Buffer) => {
-      this.logger.warn({ stderr: data.toString() }, 'Claude CLI stderr');
-    });
-
-    child.on('error', (err) => {
-      this.logger.error({ err }, 'Claude CLI spawn error');
-      parser.emit('error', err);
-      this.onProcessEnd();
-    });
-
-    child.on('close', (code, signal) => {
-      this.logger.info({ code, signal }, 'Claude CLI プロセス終了');
-      if (signal) {
-        parser.emit('error', new Error(`Claude CLI killed by signal ${signal}`));
-      } else if (code !== 0 && code !== null) {
-        parser.emit('error', new Error(`Claude CLI exited with code ${code}`));
+        if (attempt < maxRetries) {
+          const delayMs = Math.pow(2, attempt + 1) * 1000; // 2s, 4s, 8s
+          this.logger.warn(
+            { attempt: attempt + 1, maxRetries, error: error.message, delayMs },
+            'Claude CLI リトライ',
+          );
+          parser.emit('retry', {
+            attempt: attempt + 1,
+            maxRetries,
+            error: error.message,
+            delayMs,
+          });
+          await this.delay(delayMs);
+          parser.reset(); // Reset buffer for retry
+        } else {
+          // All retries exhausted
+          parser.emit('error', error);
+          this.onProcessEnd();
+          return;
+        }
       }
-      this.onProcessEnd();
+    }
+  }
+
+  private isNonRetryable(error: Error): boolean {
+    const msg = error.message;
+    return msg.includes('SIGTERM') || msg.includes('SIGKILL') || msg.includes('SIGINT');
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private execute(
+    prompt: string,
+    resumeSessionId: string | undefined,
+    parser: StreamParser,
+    model?: string,
+    approvalContext?: { channel: string; threadTs: string },
+  ): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const args = [
+        '-p', prompt,
+        '--output-format', 'stream-json',
+        '--max-turns', String(this.config.claude.maxTurns),
+        '--verbose',
+        '--allowedTools',
+        'Read', 'Write', 'Edit', 'Bash(*)', 'Glob', 'Grep',
+        'WebSearch', 'WebFetch', 'NotebookEdit',
+        'mcp__browser__browser_navigate', 'mcp__browser__browser_click',
+        'mcp__browser__browser_type', 'mcp__browser__browser_screenshot',
+        'mcp__browser__browser_get_text', 'mcp__browser__browser_wait',
+        'mcp__browser__browser_evaluate',
+        'mcp__browser__browser_secure_input',
+        'mcp__desktop__desktop_screenshot', 'mcp__desktop__desktop_click',
+        'mcp__desktop__desktop_right_click', 'mcp__desktop__desktop_double_click',
+        'mcp__desktop__desktop_type', 'mcp__desktop__desktop_key',
+        'mcp__desktop__desktop_hotkey', 'mcp__desktop__desktop_mouse_move',
+        'mcp__desktop__desktop_scroll', 'mcp__desktop__desktop_get_screen_info',
+        'mcp__desktop__desktop_open_app', 'mcp__desktop__desktop_wait',
+        'TaskCreate', 'TaskUpdate', 'TaskGet', 'TaskList', 'TaskStop', 'TaskOutput',
+        '--mcp-config', '.mcp.json',
+      ];
+
+      if (resumeSessionId) {
+        args.push('--resume', resumeSessionId);
+      }
+
+      if (model) {
+        const modelIdMap: Record<string, string> = {
+          opus: 'claude-opus-4-6',
+          sonnet: 'claude-sonnet-4-6',
+          haiku: 'claude-haiku-4-5-20251001',
+        };
+        const modelId = modelIdMap[model] ?? `claude-${model}-4-6`;
+        args.push('--model', modelId);
+      }
+
+      this.logger.info({ args: args.filter((_, i) => i !== 1) }, 'Claude CLI 起動'); // promptは除外してログ
+
+      // Sandbox mode: wrap with sandbox-exec
+      const command = this.config.sandbox.enabled
+        ? 'sandbox-exec'
+        : this.config.claude.cliPath;
+
+      const spawnArgs = this.config.sandbox.enabled
+        ? ['-f', this.config.sandbox.profile, this.config.claude.cliPath, ...args]
+        : args;
+
+      // Add proxy env vars when sandbox is enabled
+      const proxyEnv = this.config.sandbox.enabled
+        ? {
+            HTTP_PROXY: `http://localhost:${this.config.network.proxyPort}`,
+            HTTPS_PROXY: `http://localhost:${this.config.network.proxyPort}`,
+          }
+        : {};
+
+      const child = spawn(command, spawnArgs, {
+        env: {
+          ...process.env,
+          ...proxyEnv,
+          MUGI_CLAW_APPROVAL: '1',
+          APPROVAL_PORT: String(this.config.approval.port),
+          ...(approvalContext ? {
+            APPROVAL_CHANNEL: approvalContext.channel,
+            APPROVAL_THREAD_TS: approvalContext.threadTs,
+          } : {}),
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+      if (child.stdout) {
+        parser.attach(child.stdout);
+      }
+
+      child.stdout?.on('data', (data: Buffer) => {
+        this.logger.debug({ stdout: data.toString().slice(0, 200) }, 'Claude CLI stdout chunk');
+      });
+
+      child.stderr?.on('data', (data: Buffer) => {
+        this.logger.warn({ stderr: data.toString() }, 'Claude CLI stderr');
+      });
+
+      child.on('error', (err) => {
+        this.logger.error({ err }, 'Claude CLI spawn error');
+        reject(err);
+      });
+
+      child.on('close', (code, signal) => {
+        this.logger.info({ code, signal }, 'Claude CLI プロセス終了');
+        if (signal) {
+          reject(new Error(`Claude CLI killed by signal ${signal}`));
+        } else if (code !== 0 && code !== null) {
+          reject(new Error(`Claude CLI exited with code ${code}`));
+        } else {
+          resolve();
+        }
+      });
     });
   }
 

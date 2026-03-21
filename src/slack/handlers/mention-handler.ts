@@ -2,6 +2,7 @@ import type { App } from '@slack/bolt';
 import type { AppConfig } from '../../types.js';
 import type { Logger } from 'pino';
 import { mkdir, writeFile } from 'node:fs/promises';
+import { sanitizeFileName } from '../../security/input-sanitizer.js';
 import { collectContext } from '../context-collector.js';
 import { ThreadManager } from '../thread-manager.js';
 import { buildPrompt } from '../../claude/prompt-builder.js';
@@ -30,6 +31,13 @@ export function registerMentionHandler(
 
   app.event('app_mention', async ({ event, client }) => {
     const threadTs = event.thread_ts ?? event.ts;
+
+    // ボットループ防止: 他のボットからのメンションを無視
+    if (event.bot_id || (event as unknown as Record<string, unknown>).subtype === 'bot_message') {
+      logger.debug({ botId: event.bot_id, threadTs }, 'ボットメッセージを無視');
+      return;
+    }
+
     const userMessage = event.text.replace(/<@[A-Z0-9]+>/g, '').trim();
     const userId = event.user ?? 'unknown';
 
@@ -74,7 +82,7 @@ export function registerMentionHandler(
               if (res.ok) {
                 const tmpDir = '/tmp/mugi-claw';
                 await mkdir(tmpDir, { recursive: true });
-                const tmpPath = `${tmpDir}/${file.name ?? 'file'}`;
+                const tmpPath = `${tmpDir}/${sanitizeFileName(file.name ?? 'file')}`;
                 const buffer = Buffer.from(await res.arrayBuffer());
                 await writeFile(tmpPath, buffer);
                 fileInfos.push(`添付ファイル: ${file.name} (${file.filetype}) → ${tmpPath}`);
@@ -125,6 +133,13 @@ export function registerMentionHandler(
         await threadManager.updateProgress({
           type: 'text',
           content: ev.message,
+        });
+      });
+
+      runner.on('retry', async (ev) => {
+        await threadManager.updateProgress({
+          type: 'text',
+          content: `🔄 リトライ中... (${ev.attempt}/${ev.maxRetries})`,
         });
       });
 

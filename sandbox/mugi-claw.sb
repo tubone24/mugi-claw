@@ -16,8 +16,10 @@
 
 ;; File read: restrict to necessary paths
 (allow file-read* (subpath "/Users/tubone24/project/mugi-claw"))
+(allow file-read* (subpath "/Users/tubone24/project/obsidian"))
 (allow file-read* (subpath "/Users/tubone24/.mugi-claw"))
 (allow file-read* (subpath "/Users/tubone24/.claude"))
+(allow file-read* (subpath "/Users/tubone24/.local"))
 (allow file-read* (subpath "/Users/tubone24/.npm"))
 (allow file-read* (subpath "/Users/tubone24/.node"))
 (allow file-read* (subpath "/tmp"))
@@ -35,6 +37,7 @@
 
 ;; File write: restricted to project, claude config, and temp dirs
 (allow file-write* (subpath "/Users/tubone24/project/mugi-claw"))
+(allow file-write* (subpath "/Users/tubone24/project/obsidian"))
 (allow file-write* (subpath "/Users/tubone24/.mugi-claw"))
 (allow file-write* (subpath "/Users/tubone24/.claude"))
 (allow file-write* (subpath "/tmp"))

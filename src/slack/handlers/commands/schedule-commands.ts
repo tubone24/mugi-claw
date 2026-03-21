@@ -10,7 +10,7 @@ export async function handleScheduleCommand(
   taskStore: TaskStore,
   scheduler: Scheduler,
   _settingsStore: SettingsStore,
-  options?: { triggerId?: string; client?: WebClient },
+  options?: { triggerId?: string; client?: WebClient; userId?: string },
 ): Promise<string> {
   const action = args[0]?.toLowerCase() ?? 'list';
 
@@ -52,7 +52,7 @@ function handleList(taskStore: TaskStore): string {
   return lines.join('\n');
 }
 
-async function handleAdd(args: string[], taskStore: TaskStore, scheduler: Scheduler, options?: { triggerId?: string; client?: WebClient }): Promise<string> {
+async function handleAdd(args: string[], taskStore: TaskStore, scheduler: Scheduler, options?: { triggerId?: string; client?: WebClient; userId?: string }): Promise<string> {
   // No args → open modal
   if (args.length === 0 && options?.triggerId && options?.client) {
     await options.client.views.open({
@@ -97,6 +97,7 @@ async function handleAdd(args: string[], taskStore: TaskStore, scheduler: Schedu
     name: name,
     cronExpression: cronExpression,
     taskPrompt: prompt,
+    createdBy: options?.userId,
   });
 
   scheduler.addTask(task);

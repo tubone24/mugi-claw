@@ -195,6 +195,7 @@ export function registerMentionHandler(
                     mentionUsers: action.mentionUsers,
                     mentionHere: action.mentionHere,
                     mentionChannel: action.mentionChannel,
+                    createdBy: userId,
                   });
                   scheduler.addTask(task);
                   logger.info({ taskName: action.name }, 'スケジュール追加');

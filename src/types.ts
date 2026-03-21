@@ -122,6 +122,7 @@ export interface ScheduledTask {
   mentionUsers: string[];    // ['U12345', 'U67890']
   mentionHere: boolean;      // <!here>
   mentionChannel: boolean;   // <!channel>
+  createdBy?: string;
   createdAt: string;
   updatedAt: string;
   lastRunAt?: string;

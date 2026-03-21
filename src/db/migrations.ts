@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
   mention_users TEXT DEFAULT '[]',
   mention_here INTEGER DEFAULT 0,
   mention_channel INTEGER DEFAULT 0,
+  created_by TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now')),
   last_run_at TEXT,

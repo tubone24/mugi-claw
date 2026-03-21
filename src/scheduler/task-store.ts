@@ -23,6 +23,26 @@ export class TaskStore {
     return row ? this.rowToTask(row) : null;
   }
 
+  getTasksByUser(slackUserId: string): ScheduledTask[] {
+    const rows = getDb().prepare(
+      'SELECT * FROM scheduled_tasks WHERE created_by = ? OR created_by IS NULL ORDER BY created_at DESC'
+    ).all(slackUserId) as Record<string, unknown>[];
+    return rows.map(this.rowToTask);
+  }
+
+  getRecentRunsByUser(slackUserId: string, limit = 5): (TaskRun & { taskName: string })[] {
+    const rows = getDb().prepare(
+      `SELECT tr.*, st.name as task_name FROM task_runs tr
+       JOIN scheduled_tasks st ON tr.task_id = st.id
+       WHERE st.created_by = ? OR st.created_by IS NULL
+       ORDER BY tr.started_at DESC LIMIT ?`
+    ).all(slackUserId, limit) as Record<string, unknown>[];
+    return rows.map(row => ({
+      ...this.rowToRun(row),
+      taskName: row['task_name'] as string,
+    }));
+  }
+
   createTask(data: {
     name: string;
     description?: string;
@@ -34,12 +54,13 @@ export class TaskStore {
     mentionUsers?: string[];
     mentionHere?: boolean;
     mentionChannel?: boolean;
+    createdBy?: string;
   }): ScheduledTask {
     const id = nanoid();
     getDb().prepare(
-      `INSERT INTO scheduled_tasks (id, name, description, cron_expression, task_prompt, notify_channel, notify_type, model, mention_users, mention_here, mention_channel)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, data.name, data.description ?? null, data.cronExpression, data.taskPrompt, data.notifyChannel ?? null, data.notifyType ?? 'dm', data.model ?? null, JSON.stringify(data.mentionUsers ?? []), data.mentionHere ? 1 : 0, data.mentionChannel ? 1 : 0);
+      `INSERT INTO scheduled_tasks (id, name, description, cron_expression, task_prompt, notify_channel, notify_type, model, mention_users, mention_here, mention_channel, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, data.name, data.description ?? null, data.cronExpression, data.taskPrompt, data.notifyChannel ?? null, data.notifyType ?? 'dm', data.model ?? null, JSON.stringify(data.mentionUsers ?? []), data.mentionHere ? 1 : 0, data.mentionChannel ? 1 : 0, data.createdBy ?? null);
     return this.getTask(id)!;
   }
 
@@ -115,6 +136,7 @@ export class TaskStore {
       mentionUsers: JSON.parse((row['mention_users'] as string) ?? '[]'),
       mentionHere: (row['mention_here'] as number) === 1,
       mentionChannel: (row['mention_channel'] as number) === 1,
+      createdBy: row['created_by'] as string | undefined,
       createdAt: row['created_at'] as string,
       updatedAt: row['updated_at'] as string,
       lastRunAt: row['last_run_at'] as string | undefined,

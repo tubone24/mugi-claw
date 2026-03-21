@@ -2,6 +2,7 @@ import { loadConfig } from './config.js';
 import { createSlackApp } from './slack/app.js';
 import { registerMentionHandler } from './slack/handlers/mention-handler.js';
 import { registerCommandHandler } from './slack/handlers/command-handler.js';
+import { registerHomeTabHandler } from './slack/handlers/home-tab-handler.js';
 import { ChromeLauncher } from './browser/chrome-launcher.js';
 import { initDb, closeDb } from './db/database.js';
 import { SettingsStore } from './db/settings-store.js';
@@ -59,9 +60,9 @@ async function main() {
   registerApprovalHandlers(app, approvalManager, logger);
 
   // 4.6. ネットワークプロキシ初期化（sandbox有効時）
+  const whitelistStore = config.sandbox.enabled ? new WhitelistStore(config.network.defaultWhitelist) : null;
   let proxyServer: ProxyServer | null = null;
-  if (config.sandbox.enabled) {
-    const whitelistStore = new WhitelistStore(config.network.defaultWhitelist);
+  if (config.sandbox.enabled && whitelistStore) {
     whitelistStore.seedDefaults();
     const networkApproval = new NetworkApprovalManager(app, config.owner.slackUserId, logger);
     proxyServer = new ProxyServer(whitelistStore, networkApproval, config.network.proxyPort, logger);
@@ -80,6 +81,7 @@ async function main() {
   // 7. ハンドラー登録
   registerMentionHandler(app, config, logger, profileStore, profileOnboarding, settingsStore, taskStore, scheduler);
   registerCommandHandler(app, profileStore, taskStore, scheduler, settingsStore, logger);
+  registerHomeTabHandler(app, config, profileStore, taskStore, scheduler, settingsStore, whitelistStore, logger);
 
   // 8. Block Kit インタラクション（プロフィールオンボーディング）
   app.action('profile_submit', async ({ ack, body, client }) => {
@@ -244,6 +246,7 @@ async function main() {
           mentionHere: values.mentionHere,
           mentionChannel: values.mentionChannel,
           model: values.model,
+          createdBy: body.user.id,
         });
 
         scheduler.addTask(task);

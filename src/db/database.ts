@@ -27,6 +27,7 @@ export function initDb(dbPath: string): Database.Database {
     'ALTER TABLE scheduled_tasks ADD COLUMN mention_users TEXT DEFAULT \'[]\'',
     'ALTER TABLE scheduled_tasks ADD COLUMN mention_here INTEGER DEFAULT 0',
     'ALTER TABLE scheduled_tasks ADD COLUMN mention_channel INTEGER DEFAULT 0',
+    'ALTER TABLE scheduled_tasks ADD COLUMN created_by TEXT',
   ];
   for (const sql of alterStatements) {
     try {

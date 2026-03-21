@@ -1,58 +1,14 @@
 ;; mugi-claw Seatbelt Sandbox Profile
+;; Strategy: allow default, deny only sensitive filesystem paths.
+;; Network control is handled by Layer 2 (HTTP proxy + Slack approval flow).
 ;; NOTE: Paths containing /Users/tubone24 must be updated to match your $HOME
 (version 1)
-(deny default)
+(allow default)
 
-;; System basics
-(allow sysctl-read)
-(allow mach-lookup)
-(allow ipc-posix-shm-read*)
-(allow ipc-posix-shm-write*)
-(allow process-info*)
-
-;; Process execution
-(allow process-exec*)
-(allow process-fork)
-(allow signal)
-
-;; Shared library loading (required by dyld / Rosetta)
-(allow file-map-executable)
-
-;; File read: restrict to necessary paths
-(allow file-read* (subpath "/Users/tubone24/project/mugi-claw"))
-(allow file-read* (subpath "/Users/tubone24/project/obsidian"))
-(allow file-read* (subpath "/Users/tubone24/.mugi-claw"))
-(allow file-read* (subpath "/Users/tubone24/.claude"))
-(allow file-read* (subpath "/Users/tubone24/.local"))
-(allow file-read* (subpath "/Users/tubone24/.npm"))
-(allow file-read* (subpath "/Users/tubone24/.node"))
-(allow file-read* (subpath "/tmp"))
-(allow file-read* (subpath "/private/tmp"))
-(allow file-read* (subpath "/usr"))
-(allow file-read* (subpath "/opt/homebrew"))
-(allow file-read* (subpath "/System"))
-(allow file-read* (subpath "/Library"))
-(allow file-read* (subpath "/dev"))
-(allow file-read* (subpath "/var"))
-(allow file-read* (subpath "/etc"))
-(allow file-read* (subpath "/bin"))
-(allow file-read* (subpath "/sbin"))
-(allow file-read* (subpath "/Applications"))
-
-;; File write: restricted to project, claude config, and temp dirs
-(allow file-write* (subpath "/Users/tubone24/project/mugi-claw"))
-(allow file-write* (subpath "/Users/tubone24/project/obsidian"))
-(allow file-write* (subpath "/Users/tubone24/.mugi-claw"))
-(allow file-write* (subpath "/Users/tubone24/.claude"))
-(allow file-write* (subpath "/tmp"))
-(allow file-write* (subpath "/private/tmp"))
-(allow file-write* (subpath "/dev"))
-
-;; Network: localhost only (Chrome CDP:9222, proxy:18080, approval:3456)
-(allow network-outbound (remote ip "localhost:*"))
-(allow network-outbound (remote tcp "localhost:*"))
-(allow network-outbound (remote unix-socket))
-(allow network-inbound)
-
-;; DNS resolution (needed for proxy to resolve hostnames)
-(allow network-outbound (remote udp "*:53"))
+;; === Filesystem: deny sensitive paths ===
+(deny file-read* (subpath "/Users/tubone24/.ssh"))
+(deny file-read* (subpath "/Users/tubone24/.aws"))
+(deny file-read* (subpath "/Users/tubone24/.gnupg"))
+(deny file-write* (subpath "/Users/tubone24/.ssh"))
+(deny file-write* (subpath "/Users/tubone24/.aws"))
+(deny file-write* (subpath "/Users/tubone24/.gnupg"))

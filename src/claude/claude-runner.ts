@@ -42,6 +42,7 @@ export class ClaudeRunner {
       'mcp__browser__browser_type', 'mcp__browser__browser_screenshot',
       'mcp__browser__browser_get_text', 'mcp__browser__browser_wait',
       'mcp__browser__browser_evaluate',
+      'mcp__browser__browser_secure_input',
       'mcp__desktop__desktop_screenshot', 'mcp__desktop__desktop_click',
       'mcp__desktop__desktop_right_click', 'mcp__desktop__desktop_double_click',
       'mcp__desktop__desktop_type', 'mcp__desktop__desktop_key',

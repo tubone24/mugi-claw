@@ -117,7 +117,7 @@ function createServer(): McpServer {
   server.registerTool(
     'browser_type',
     {
-      description: '指定セレクタの要素にテキストを入力する',
+      description: '指定セレクタの要素にテキストを入力する。パスワード等の機密情報の入力には browser_secure_input を使うこと。',
       inputSchema: {
         selector: z.string().describe('入力対象のCSSセレクタ'),
         text: z.string().describe('入力するテキスト'),
@@ -247,6 +247,115 @@ function createServer(): McpServer {
           },
         ],
       };
+    },
+  );
+
+  // --- browser_secure_input ---
+  server.registerTool(
+    'browser_secure_input',
+    {
+      description:
+        'パスワードやOTP等の機密情報をユーザーに安全に入力してもらう。入力はローカルWeb UI経由で行われ、LLMのコンテキストには機密情報が含まれない。先にbrowser_screenshotやbrowser_get_textでフォーム構造を確認し、適切なCSSセレクタとラベルを指定すること。',
+      inputSchema: {
+        site: z.string().describe('ログイン対象のサイト名またはURL'),
+        fields: z
+          .array(
+            z.object({
+              selector: z.string().describe('入力対象のCSSセレクタ'),
+              label: z.string().describe('フィールドのラベル（Web UIで表示）'),
+              sensitive: z
+                .boolean()
+                .optional()
+                .default(false)
+                .describe('パスワード等の機密フィールドか'),
+            }),
+          )
+          .describe('入力が必要なフィールドの一覧'),
+      },
+    },
+    async ({ site, fields }) => {
+      try {
+        // AbortControllerで6分タイムアウト（ApprovalServer側は5分）
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6 * 60 * 1000);
+
+        let response: Response;
+        try {
+          // ApprovalServerにクレデンシャル入力リクエストを送信（ブロッキング）
+          response = await fetch(
+            `http://127.0.0.1:${APPROVAL_PORT}/api/credential-request`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                site,
+                fields,
+                approval_channel: APPROVAL_CHANNEL,
+                approval_thread_ts: APPROVAL_THREAD_TS,
+              }),
+              signal: controller.signal,
+            },
+          );
+        } finally {
+          clearTimeout(timeoutId);
+        }
+
+        const result = (await response.json()) as {
+          success: boolean;
+          values?: Record<string, string>;
+          error?: string;
+        };
+
+        if (!result.success || !result.values) {
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `Secure input failed: ${result.error ?? 'unknown error'}`,
+              },
+            ],
+          };
+        }
+
+        // ブラウザの各フィールドに値を入力
+        const p = await getPage();
+        let filledCount = 0;
+        // result から値を取り出し、元の参照を切る
+        let values: Record<string, string> | null = result.values;
+        (result as { values?: unknown }).values = undefined;
+
+        try {
+          for (const field of fields) {
+            const value = values[field.selector];
+            if (value !== undefined) {
+              await p.fill(field.selector, value);
+              filledCount++;
+            }
+          }
+        } finally {
+          // 値を即座に破棄（GC対象にする）
+          values = null;
+        }
+
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Secure input completed: ${filledCount} field(s) filled on ${site}`,
+            },
+          ],
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Secure input error: ${message}`,
+            },
+          ],
+        };
+      }
     },
   );
 

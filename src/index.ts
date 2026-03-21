@@ -13,6 +13,7 @@ import { Scheduler } from './scheduler/scheduler.js';
 import { Notifier } from './slack/notifier.js';
 import { ApprovalManager } from './approval/approval-manager.js';
 import { ApprovalServer } from './approval/approval-server.js';
+import { CredentialManager } from './credential/credential-manager.js';
 import { registerApprovalHandlers } from './approval/register-handlers.js';
 import { WhitelistStore } from './network/whitelist-store.js';
 import { NetworkApprovalManager } from './network/network-approval.js';
@@ -47,7 +48,8 @@ async function main() {
 
   // 4.5. ツール承認システム初期化
   const approvalManager = new ApprovalManager(app.client, config.owner.slackUserId, logger);
-  const approvalServer = new ApprovalServer(approvalManager, app.client, config.approval.port, logger);
+  const credentialManager = new CredentialManager(app.client, config.owner.slackUserId, config.approval.port, logger);
+  const approvalServer = new ApprovalServer(approvalManager, app.client, config.approval.port, logger, credentialManager);
   await approvalServer.start();
   registerApprovalHandlers(app, approvalManager, logger);
 

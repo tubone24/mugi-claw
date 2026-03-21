@@ -127,6 +127,7 @@ export class ThreadManager {
       browser_type: '\u2328\uFE0F',
       browser_screenshot: '\u{1F4F8}',
       browser_get_text: '\u{1F4C4}',
+      browser_secure_input: '\u{1F510}',
       Read: '\u{1F4D6}',
       Edit: '\u270F\uFE0F',
       Write: '\u{1F4DD}',

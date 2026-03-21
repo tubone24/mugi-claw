@@ -1,5 +1,5 @@
 ;; mugi-claw Seatbelt Sandbox Profile
-;; NOTE: Paths containing /Users/kagadminmac must be updated to match your $HOME
+;; NOTE: Paths containing /Users/tubone24 must be updated to match your $HOME
 (version 1)
 (deny default)
 
@@ -15,11 +15,11 @@
 (allow signal)
 
 ;; File read: restrict to necessary paths
-(allow file-read* (subpath "/Users/kagadminmac/project/mugi-claw"))
-(allow file-read* (subpath "/Users/kagadminmac/.mugi-claw"))
-(allow file-read* (subpath "/Users/kagadminmac/.claude"))
-(allow file-read* (subpath "/Users/kagadminmac/.npm"))
-(allow file-read* (subpath "/Users/kagadminmac/.node"))
+(allow file-read* (subpath "/Users/tubone24/project/mugi-claw"))
+(allow file-read* (subpath "/Users/tubone24/.mugi-claw"))
+(allow file-read* (subpath "/Users/tubone24/.claude"))
+(allow file-read* (subpath "/Users/tubone24/.npm"))
+(allow file-read* (subpath "/Users/tubone24/.node"))
 (allow file-read* (subpath "/tmp"))
 (allow file-read* (subpath "/private/tmp"))
 (allow file-read* (subpath "/usr"))
@@ -33,9 +33,10 @@
 (allow file-read* (subpath "/sbin"))
 (allow file-read* (subpath "/Applications"))
 
-;; File write: restricted to project and temp dirs
-(allow file-write* (subpath "/Users/kagadminmac/project/mugi-claw"))
-(allow file-write* (subpath "/Users/kagadminmac/.mugi-claw"))
+;; File write: restricted to project, claude config, and temp dirs
+(allow file-write* (subpath "/Users/tubone24/project/mugi-claw"))
+(allow file-write* (subpath "/Users/tubone24/.mugi-claw"))
+(allow file-write* (subpath "/Users/tubone24/.claude"))
 (allow file-write* (subpath "/tmp"))
 (allow file-write* (subpath "/private/tmp"))
 (allow file-write* (subpath "/dev"))

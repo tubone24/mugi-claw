@@ -11,6 +11,9 @@ export interface ParsedResult {
     notifyType?: 'dm' | 'channel';
     notifyChannel?: string;
     model?: string;
+    mentionUsers?: string[];
+    mentionHere?: boolean;
+    mentionChannel?: boolean;
   }>;
 }
 
@@ -81,6 +84,7 @@ export function parseClaudeResult(text: string): ParsedResult {
     const action = extractField(block, 'action') as 'add' | 'remove' | 'pause' | 'resume' | undefined;
     const name = extractField(block, 'name');
     if (action && name) {
+      const mentionUsersRaw = extractField(block, 'mentionUsers');
       scheduleActions.push({
         action,
         name,
@@ -90,6 +94,9 @@ export function parseClaudeResult(text: string): ParsedResult {
         notifyType: extractField(block, 'notifyType') as 'dm' | 'channel' | undefined,
         notifyChannel: extractField(block, 'notifyChannel'),
         model: extractField(block, 'model'),
+        mentionUsers: mentionUsersRaw ? mentionUsersRaw.split(/[,、\s]+/).filter(Boolean) : undefined,
+        mentionHere: extractField(block, 'mentionHere') === 'true',
+        mentionChannel: extractField(block, 'mentionChannel') === 'true',
       });
     }
     cleanText = cleanText.replace(match[0], '');

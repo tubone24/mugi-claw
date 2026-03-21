@@ -177,6 +177,9 @@ export function registerMentionHandler(
                     notifyType: action.notifyType,
                     notifyChannel: action.notifyChannel,
                     model: action.model,
+                    mentionUsers: action.mentionUsers,
+                    mentionHere: action.mentionHere,
+                    mentionChannel: action.mentionChannel,
                   });
                   scheduler.addTask(task);
                   logger.info({ taskName: action.name }, 'スケジュール追加');

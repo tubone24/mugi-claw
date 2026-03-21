@@ -61,6 +61,12 @@ name: タスク名
 cron: cron式(addの場合)
 prompt: タスクのプロンプト(addの場合)
 description: タスクの説明(addの場合、任意)
+notifyType: dm|channel(任意、デフォルト: dm)
+notifyChannel: チャンネルID(notifyType=channelの場合)
+model: opus|sonnet|haiku(任意)
+mentionUsers: U12345,U67890(カンマ区切りのユーザーID、任意)
+mentionHere: true|false(任意)
+mentionChannel: true|false(任意)
 [/SCHEDULE_ACTION]
 ```
 

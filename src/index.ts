@@ -11,6 +11,8 @@ import { TaskStore } from './scheduler/task-store.js';
 import { TaskRunner } from './scheduler/task-runner.js';
 import { Scheduler } from './scheduler/scheduler.js';
 import { Notifier } from './slack/notifier.js';
+import { SCHEDULE_MODAL_CALLBACK_ID, parseModalValues } from './slack/handlers/commands/schedule-modal.js';
+import cron from 'node-cron';
 import { ApprovalManager } from './approval/approval-manager.js';
 import { ApprovalServer } from './approval/approval-server.js';
 import { CredentialManager } from './credential/credential-manager.js';
@@ -116,6 +118,162 @@ async function main() {
       }
     } catch (err) {
       logger.error({ err }, 'プロフィールスキップ処理エラー');
+    }
+  });
+
+  // 8.5. スケジュールモーダルsubmitハンドラ
+  app.view(SCHEDULE_MODAL_CALLBACK_ID, async ({ ack, body, view, client }) => {
+    try {
+      const values = parseModalValues(view.state.values);
+
+      // Validate cron expression
+      if (!cron.validate(values.cronExpression)) {
+        await ack({
+          response_action: 'errors',
+          errors: {
+            cron_expression: '無効なcron式わん。形式: 分 時 日 月 曜日 (例: 0 9 * * *)',
+          },
+        });
+        return;
+      }
+
+      // Validate channel selection when notify type is channel
+      if (values.notifyType === 'channel' && !values.notifyChannel) {
+        await ack({
+          response_action: 'errors',
+          errors: {
+            notify_channel: 'チャンネル通知を選択した場合、チャンネルを指定してわん',
+          },
+        });
+        return;
+      }
+
+      // Check if editing or creating
+      let metadata: { taskId?: string } = {};
+      if (view.private_metadata) {
+        try {
+          const parsed = JSON.parse(view.private_metadata);
+          if (typeof parsed.taskId === 'string') {
+            metadata = { taskId: parsed.taskId };
+          }
+        } catch {
+          // Invalid metadata — treat as new creation
+        }
+      }
+      const taskId = metadata.taskId;
+      const isEdit = !!taskId;
+
+      if (isEdit) {
+        // Update existing task
+        const existingTask = taskStore.getTask(taskId);
+        if (!existingTask) {
+          await ack({
+            response_action: 'errors',
+            errors: {
+              task_name: 'タスクが見つからないわん',
+            },
+          });
+          return;
+        }
+
+        // Check name uniqueness (only if name changed)
+        if (values.name !== existingTask.name && taskStore.getTaskByName(values.name)) {
+          await ack({
+            response_action: 'errors',
+            errors: {
+              task_name: `タスク「${values.name}」は既に存在するわん`,
+            },
+          });
+          return;
+        }
+
+        await ack();
+
+        taskStore.updateTask(taskId, {
+          name: values.name,
+          cronExpression: values.cronExpression,
+          taskPrompt: values.taskPrompt,
+          notifyType: values.notifyType,
+          notifyChannel: values.notifyChannel,
+          mentionUsers: values.mentionUsers,
+          mentionHere: values.mentionHere,
+          mentionChannel: values.mentionChannel,
+          model: values.model,
+        });
+
+        // Re-register cron job
+        const updatedTask = taskStore.getTask(taskId);
+        if (updatedTask) {
+          scheduler.removeTask(updatedTask.id);
+          scheduler.addTask(updatedTask);
+        }
+
+        // Send success DM
+        try {
+          const dm = await client.conversations.open({ users: body.user.id });
+          if (dm.channel?.id) {
+            await client.chat.postMessage({
+              channel: dm.channel.id,
+              text: `スケジュール「${values.name}」を更新したわん！ \`${values.cronExpression}\``,
+            });
+          }
+        } catch (err) {
+          logger.error({ err }, 'スケジュール更新通知失敗');
+        }
+      } else {
+        // Create new task — check name uniqueness
+        if (taskStore.getTaskByName(values.name)) {
+          await ack({
+            response_action: 'errors',
+            errors: {
+              task_name: `タスク「${values.name}」は既に存在するわん`,
+            },
+          });
+          return;
+        }
+
+        await ack();
+
+        const task = taskStore.createTask({
+          name: values.name,
+          cronExpression: values.cronExpression,
+          taskPrompt: values.taskPrompt,
+          notifyType: values.notifyType,
+          notifyChannel: values.notifyChannel,
+          mentionUsers: values.mentionUsers,
+          mentionHere: values.mentionHere,
+          mentionChannel: values.mentionChannel,
+          model: values.model,
+        });
+
+        scheduler.addTask(task);
+
+        // Send success DM
+        try {
+          const dm = await client.conversations.open({ users: body.user.id });
+          if (dm.channel?.id) {
+            await client.chat.postMessage({
+              channel: dm.channel.id,
+              text: `スケジュール「${values.name}」を登録したわん！ \`${values.cronExpression}\``,
+            });
+          }
+        } catch (err) {
+          logger.error({ err }, 'スケジュール登録通知失敗');
+        }
+      }
+    } catch (err) {
+      logger.error({ err }, 'スケジュールモーダル処理エラー');
+      // ack() may have already been called — ignore errors from double-ack
+      try {
+        await ack({
+          response_action: 'errors',
+          errors: {
+            task_name: 'エラーが発生したわん。もう一度試してわん',
+          },
+        });
+      } catch {
+        // ack already called — ignore
+      }
     }
   });
 

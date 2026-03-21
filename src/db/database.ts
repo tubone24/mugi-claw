@@ -22,6 +22,23 @@ export function initDb(dbPath: string): Database.Database {
   // Run migrations
   db.exec(SCHEMA_SQL);
 
+  // Migrate: add mention columns to scheduled_tasks
+  const alterStatements = [
+    'ALTER TABLE scheduled_tasks ADD COLUMN mention_users TEXT DEFAULT \'[]\'',
+    'ALTER TABLE scheduled_tasks ADD COLUMN mention_here INTEGER DEFAULT 0',
+    'ALTER TABLE scheduled_tasks ADD COLUMN mention_channel INTEGER DEFAULT 0',
+  ];
+  for (const sql of alterStatements) {
+    try {
+      db.exec(sql);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes('duplicate column')) {
+        throw err;
+      }
+    }
+  }
+
   return db;
 }
 

@@ -26,7 +26,8 @@ export class Notifier {
       ? `\n_コスト: $${result.costUsd.toFixed(4)} | 所要時間: ${((result.durationMs ?? 0) / 1000).toFixed(1)}s_`
       : '';
 
-    const message = `${header}\n${body}${costInfo}`;
+    const mentionPrefix = this.buildMentionPrefix(task);
+    const message = `${mentionPrefix}${header}\n${body}${costInfo}`;
 
     // Split long messages (Slack limit: 4000 chars)
     const chunks = this.splitMessage(message, 4000);
@@ -53,6 +54,20 @@ export class Notifier {
         });
       }
     }
+  }
+
+  private buildMentionPrefix(task: ScheduledTask): string {
+    const parts: string[] = [];
+    // @here and @channel only for channel notifications
+    if (task.notifyType === 'channel' && task.notifyChannel) {
+      if (task.mentionHere) parts.push('<!here>');
+      if (task.mentionChannel) parts.push('<!channel>');
+    }
+    // User mentions work in both DM and channel
+    for (const userId of task.mentionUsers ?? []) {
+      parts.push(`<@${userId}>`);
+    }
+    return parts.length > 0 ? parts.join(' ') + '\n' : '';
   }
 
   private splitMessage(text: string, maxLength: number): string[] {

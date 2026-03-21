@@ -31,16 +31,19 @@ export class TaskStore {
     notifyChannel?: string;
     notifyType?: 'dm' | 'channel';
     model?: string;
+    mentionUsers?: string[];
+    mentionHere?: boolean;
+    mentionChannel?: boolean;
   }): ScheduledTask {
     const id = nanoid();
     getDb().prepare(
-      `INSERT INTO scheduled_tasks (id, name, description, cron_expression, task_prompt, notify_channel, notify_type, model)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, data.name, data.description ?? null, data.cronExpression, data.taskPrompt, data.notifyChannel ?? null, data.notifyType ?? 'dm', data.model ?? null);
+      `INSERT INTO scheduled_tasks (id, name, description, cron_expression, task_prompt, notify_channel, notify_type, model, mention_users, mention_here, mention_channel)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, data.name, data.description ?? null, data.cronExpression, data.taskPrompt, data.notifyChannel ?? null, data.notifyType ?? 'dm', data.model ?? null, JSON.stringify(data.mentionUsers ?? []), data.mentionHere ? 1 : 0, data.mentionChannel ? 1 : 0);
     return this.getTask(id)!;
   }
 
-  updateTask(id: string, data: Partial<{ name: string; description: string; cronExpression: string; taskPrompt: string; enabled: boolean; notifyChannel: string; notifyType: string; model: string }>): boolean {
+  updateTask(id: string, data: Partial<{ name: string; description: string; cronExpression: string; taskPrompt: string; enabled: boolean; notifyChannel: string; notifyType: string; model: string; mentionUsers: string[]; mentionHere: boolean; mentionChannel: boolean }>): boolean {
     const fields: string[] = [];
     const values: unknown[] = [];
     if (data.name !== undefined) { fields.push('name = ?'); values.push(data.name); }
@@ -51,6 +54,9 @@ export class TaskStore {
     if (data.notifyChannel !== undefined) { fields.push('notify_channel = ?'); values.push(data.notifyChannel); }
     if (data.notifyType !== undefined) { fields.push('notify_type = ?'); values.push(data.notifyType); }
     if (data.model !== undefined) { fields.push('model = ?'); values.push(data.model); }
+    if (data.mentionUsers !== undefined) { fields.push('mention_users = ?'); values.push(JSON.stringify(data.mentionUsers)); }
+    if (data.mentionHere !== undefined) { fields.push('mention_here = ?'); values.push(data.mentionHere ? 1 : 0); }
+    if (data.mentionChannel !== undefined) { fields.push('mention_channel = ?'); values.push(data.mentionChannel ? 1 : 0); }
     if (fields.length === 0) return false;
     fields.push("updated_at = datetime('now')");
     values.push(id);
@@ -106,6 +112,9 @@ export class TaskStore {
       notifyChannel: row['notify_channel'] as string | undefined,
       notifyType: (row['notify_type'] as 'dm' | 'channel') ?? 'dm',
       model: row['model'] as string | undefined,
+      mentionUsers: JSON.parse((row['mention_users'] as string) ?? '[]'),
+      mentionHere: (row['mention_here'] as number) === 1,
+      mentionChannel: (row['mention_channel'] as number) === 1,
       createdAt: row['created_at'] as string,
       updatedAt: row['updated_at'] as string,
       lastRunAt: row['last_run_at'] as string | undefined,

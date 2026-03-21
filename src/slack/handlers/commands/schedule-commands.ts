@@ -1,13 +1,16 @@
 import cron from 'node-cron';
+import type { WebClient } from '@slack/web-api';
 import type { TaskStore } from '../../../scheduler/task-store.js';
 import type { Scheduler } from '../../../scheduler/scheduler.js';
 import type { SettingsStore } from '../../../db/settings-store.js';
+import { buildScheduleModal } from './schedule-modal.js';
 
 export async function handleScheduleCommand(
   args: string[],
   taskStore: TaskStore,
   scheduler: Scheduler,
   _settingsStore: SettingsStore,
+  options?: { triggerId?: string; client?: WebClient },
 ): Promise<string> {
   const action = args[0]?.toLowerCase() ?? 'list';
 
@@ -15,7 +18,9 @@ export async function handleScheduleCommand(
     case 'list':
       return handleList(taskStore);
     case 'add':
-      return handleAdd(args.slice(1), taskStore, scheduler);
+      return await handleAdd(args.slice(1), taskStore, scheduler, options);
+    case 'edit':
+      return await handleEdit(args.slice(1), taskStore, options);
     case 'remove':
     case 'delete':
       return handleRemove(args.slice(1), taskStore, scheduler);
@@ -23,7 +28,7 @@ export async function handleScheduleCommand(
     case 'toggle':
       return handlePause(args.slice(1), taskStore, scheduler);
     default:
-      return '使い方: `/mugiclaw schedule [list|add|remove|pause]` わん';
+      return '使い方: `/mugiclaw schedule [list|add|edit|remove|pause]` わん';
   }
 }
 
@@ -47,7 +52,16 @@ function handleList(taskStore: TaskStore): string {
   return lines.join('\n');
 }
 
-function handleAdd(args: string[], taskStore: TaskStore, scheduler: Scheduler): string {
+async function handleAdd(args: string[], taskStore: TaskStore, scheduler: Scheduler, options?: { triggerId?: string; client?: WebClient }): Promise<string> {
+  // No args → open modal
+  if (args.length === 0 && options?.triggerId && options?.client) {
+    await options.client.views.open({
+      trigger_id: options.triggerId,
+      view: buildScheduleModal(),
+    });
+    return '';  // Empty string signals modal was opened
+  }
+
   // Expected: <name> <cron-expression> <prompt...>
   // Cron expression can be 5 parts (standard) or quoted
   if (args.length < 3) {
@@ -123,4 +137,27 @@ function handlePause(args: string[], taskStore: TaskStore, scheduler: Scheduler)
 
   const newState = task.enabled ? '一時停止' : '再開';
   return `スケジュール「${name}」を${newState}したわん`;
+}
+
+async function handleEdit(args: string[], taskStore: TaskStore, options?: { triggerId?: string; client?: WebClient }): Promise<string> {
+  const name = args.join(' ');
+  if (!name) {
+    return '使い方: `/mugiclaw schedule edit <名前>` わん';
+  }
+
+  const task = taskStore.getTaskByName(name);
+  if (!task) {
+    return `タスク「${name}」が見つからないわん`;
+  }
+
+  if (!options?.triggerId || !options?.client) {
+    return 'モーダルを開くにはSlashコマンドから実行してわん';
+  }
+
+  await options.client.views.open({
+    trigger_id: options.triggerId,
+    view: buildScheduleModal(task),
+  });
+
+  return '';  // Empty string signals modal was opened
 }

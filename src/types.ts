@@ -119,6 +119,9 @@ export interface ScheduledTask {
   notifyChannel?: string;
   notifyType: 'dm' | 'channel';
   model?: string;
+  mentionUsers: string[];    // ['U12345', 'U67890']
+  mentionHere: boolean;      // <!here>
+  mentionChannel: boolean;   // <!channel>
   createdAt: string;
   updatedAt: string;
   lastRunAt?: string;

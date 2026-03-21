@@ -17,7 +17,7 @@ export function registerCommandHandler(
   settingsStore: SettingsStore,
   logger: Logger,
 ): void {
-  app.command('/mugiclaw', async ({ command, ack, respond }) => {
+  app.command('/mugiclaw', async ({ command, ack, respond, client }) => {
     await ack();
 
     const args = command.text.trim().split(/\s+/);
@@ -29,9 +29,16 @@ export function registerCommandHandler(
         case 'profile':
           await respond(handleProfileCommand(subArgs, command.user_id, profileStore));
           break;
-        case 'schedule':
-          await respond(await handleScheduleCommand(subArgs, taskStore, scheduler, settingsStore));
+        case 'schedule': {
+          const result = await handleScheduleCommand(subArgs, taskStore, scheduler, settingsStore, {
+            triggerId: command.trigger_id,
+            client,
+          });
+          if (result) {
+            await respond(result);
+          }
           break;
+        }
         case 'run': {
           const taskName = subArgs.join(' ');
           if (!taskName) {
@@ -75,7 +82,9 @@ function getHelpText(): string {
 
 *スケジュール*
 \`/mugiclaw schedule list\` - スケジュール一覧
-\`/mugiclaw schedule add <名前> <cron式> <プロンプト>\` - スケジュール追加
+\`/mugiclaw schedule add\` - スケジュール追加（モーダル）
+\`/mugiclaw schedule add <名前> <cron式> <プロンプト>\` - テキストで追加
+\`/mugiclaw schedule edit <名前>\` - スケジュール編集
 \`/mugiclaw schedule remove <名前>\` - スケジュール削除
 \`/mugiclaw schedule pause <名前>\` - 一時停止/再開
 

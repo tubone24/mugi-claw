@@ -113,6 +113,7 @@ export class ClaudeRunner {
         'mcp__desktop__desktop_scroll', 'mcp__desktop__desktop_get_screen_info',
         'mcp__desktop__desktop_open_app', 'mcp__desktop__desktop_wait',
         'TaskCreate', 'TaskUpdate', 'TaskGet', 'TaskList', 'TaskStop', 'TaskOutput',
+        'Skill', 'CronCreate', 'CronDelete', 'CronList',
         '--mcp-config', '.mcp.json',
       ];
 

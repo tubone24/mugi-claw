@@ -18,7 +18,7 @@ const envSchema = z.object({
   PROXY_PORT: z.coerce.number().int().default(18080),
   SANDBOX_ENABLED: z.string().default('false'),
   SANDBOX_PROFILE: z.string().default('sandbox/mugi-claw.sb'),
-  DEFAULT_WHITELIST: z.string().default('registry.npmjs.org,github.com,api.anthropic.com,platform.claude.com,cloud.langfuse.com,*.datadoghq.com,slack.com'),
+  DEFAULT_WHITELIST: z.string().default('registry.npmjs.org,github.com,raw.githubusercontent.com,api.anthropic.com,platform.claude.com,cloud.langfuse.com,*.datadoghq.com,slack.com'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 });

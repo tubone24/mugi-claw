@@ -117,9 +117,11 @@ export class ClaudeRunner {
       this.onProcessEnd();
     });
 
-    child.on('close', (code) => {
-      this.logger.info({ code }, 'Claude CLI プロセス終了');
-      if (code !== 0 && code !== null) {
+    child.on('close', (code, signal) => {
+      this.logger.info({ code, signal }, 'Claude CLI プロセス終了');
+      if (signal) {
+        parser.emit('error', new Error(`Claude CLI killed by signal ${signal}`));
+      } else if (code !== 0 && code !== null) {
         parser.emit('error', new Error(`Claude CLI exited with code ${code}`));
       }
       this.onProcessEnd();

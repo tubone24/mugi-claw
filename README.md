@@ -630,9 +630,76 @@ External domain access is controlled via Slack approval:
 - 10-minute timeout → auto-deny
 - Wildcard support (e.g., `*.googleapis.com`)
 
+### Setup
+
+1. **Find your Claude CLI path** and set it in `.env`:
+
+```bash
+which claude
+# Example: /Users/yourname/.local/bin/claude
+```
+
+```bash
+# .env
+SANDBOX_ENABLED=true
+CLAUDE_CLI_PATH=/Users/yourname/.local/bin/claude
+```
+
+> `sandbox-exec` requires an absolute path — the default `claude` (relative) will fail with `execvp() failed: No such file or directory` (exit code 71).
+
+2. **Update paths in the Seatbelt profile** to match your `$HOME`:
+
+```bash
+# Replace all occurrences in sandbox/mugi-claw.sb
+sed -i '' "s|/Users/tubone24|$HOME|g" sandbox/mugi-claw.sb
+```
+
+3. **Verify the profile syntax**:
+
+```bash
+sandbox-exec -f sandbox/mugi-claw.sb /bin/true && echo "OK"
+```
+
 ### Customize the Seatbelt Profile
 
 Edit `sandbox/mugi-claw.sb` to adjust filesystem and network permissions.
+
+**Adding read/write access for a directory:**
+
+```scheme
+;; File read
+(allow file-read* (subpath "/Users/yourname/path/to/dir"))
+
+;; File write (only if needed)
+(allow file-write* (subpath "/Users/yourname/path/to/dir"))
+```
+
+**Seatbelt rules:**
+
+| Rule | Description |
+|------|-------------|
+| `(deny default)` | Deny everything by default |
+| `(allow file-read* (subpath "..."))` | Allow read access to a directory tree |
+| `(allow file-write* (subpath "..."))` | Allow write access to a directory tree |
+| `(allow network-outbound (remote ip "localhost:*"))` | Allow outbound connections to localhost |
+| `(allow network-outbound (remote unix-socket))` | Allow Unix socket connections |
+
+> **Important:** Network host must be `*` or `localhost` — IP addresses like `127.0.0.1` are not allowed and will cause exit code 65.
+
+### Troubleshooting
+
+| Exit Code | Error | Cause | Fix |
+|-----------|-------|-------|-----|
+| 65 | `host must be * or localhost in network address` | IP address used in network rule | Use `localhost` instead of `127.0.0.1` |
+| 71 | `execvp() of 'claude' failed: No such file or directory` | Relative CLI path | Set `CLAUDE_CLI_PATH` to absolute path |
+| 65 | Permission denied during init | `~/.claude` not writable | Add `(allow file-write* (subpath "~/.claude"))` |
+
+**Debug Seatbelt blocks:**
+
+```bash
+# Watch for sandbox violations in real-time
+log stream --style compact --predicate 'sender=="Sandbox"'
+```
 
 ## Browser Automation
 

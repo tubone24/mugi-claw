@@ -161,6 +161,9 @@ export interface AppConfig {
   approval: {
     port: number;
   };
+  credential: {
+    port: number;
+  };
   network: {
     proxyPort: number;
     defaultWhitelist: string[];

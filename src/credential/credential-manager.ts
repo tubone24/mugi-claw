@@ -1,6 +1,20 @@
+import { networkInterfaces } from 'node:os';
 import type { WebClient } from '@slack/web-api';
 import type { Logger } from 'pino';
 import { nanoid } from 'nanoid';
+
+function getLocalIp(): string {
+  const nets = networkInterfaces();
+  for (const interfaces of Object.values(nets)) {
+    if (!interfaces) continue;
+    for (const net of interfaces) {
+      if (net.family === 'IPv4' && !net.internal) {
+        return net.address;
+      }
+    }
+  }
+  return '127.0.0.1';
+}
 
 export interface CredentialField {
   selector: string;
@@ -93,7 +107,8 @@ export class CredentialManager {
 
   private async sendNotification(request: CredentialRequest, context?: { channel: string; threadTs: string }): Promise<void> {
     const fieldLabels = request.fields.map(f => f.label).join(', ');
-    const url = `http://localhost:${this.port}/credential/${request.requestId}`;
+    const ip = getLocalIp();
+    const url = `http://${ip}:${this.port}/credential/${request.requestId}`;
 
     let channelId: string;
     let threadTs: string | undefined;

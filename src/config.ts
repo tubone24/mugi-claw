@@ -10,6 +10,7 @@ const envSchema = z.object({
   CLAUDE_MAX_CONCURRENT: z.coerce.number().int().min(1).max(10).default(3),
   CLAUDE_MAX_TURNS: z.coerce.number().int().min(1).max(200).default(50),
   APPROVAL_PORT: z.coerce.number().int().default(3456),
+  CREDENTIAL_PORT: z.coerce.number().int().default(3457),
   CHROME_DEBUGGING_PORT: z.coerce.number().int().default(9222),
   CHROME_USER_DATA_DIR: z.string().default('~/.mugi-claw/chrome-profile'),
   DB_PATH: z.string().default('~/.mugi-claw/mugi-claw.db'),
@@ -45,6 +46,9 @@ export function loadConfig(): AppConfig {
     },
     approval: {
       port: env.APPROVAL_PORT,
+    },
+    credential: {
+      port: env.CREDENTIAL_PORT,
     },
     network: {
       proxyPort: env.PROXY_PORT,

@@ -14,6 +14,7 @@ import { Notifier } from './slack/notifier.js';
 import { ApprovalManager } from './approval/approval-manager.js';
 import { ApprovalServer } from './approval/approval-server.js';
 import { CredentialManager } from './credential/credential-manager.js';
+import { CredentialServer } from './credential/credential-server.js';
 import { registerApprovalHandlers } from './approval/register-handlers.js';
 import { WhitelistStore } from './network/whitelist-store.js';
 import { NetworkApprovalManager } from './network/network-approval.js';
@@ -48,9 +49,11 @@ async function main() {
 
   // 4.5. ツール承認システム初期化
   const approvalManager = new ApprovalManager(app.client, config.owner.slackUserId, logger);
-  const credentialManager = new CredentialManager(app.client, config.owner.slackUserId, config.approval.port, logger);
+  const credentialManager = new CredentialManager(app.client, config.owner.slackUserId, config.credential.port, logger);
   const approvalServer = new ApprovalServer(approvalManager, app.client, config.approval.port, logger, credentialManager);
   await approvalServer.start();
+  const credentialServer = new CredentialServer(credentialManager, config.credential.port, logger);
+  await credentialServer.start();
   registerApprovalHandlers(app, approvalManager, logger);
 
   // 4.6. ネットワークプロキシ初期化（sandbox有効時）
@@ -128,6 +131,7 @@ async function main() {
     logger.info('mugi-claw を停止するわん...');
     scheduler.shutdown();
     if (proxyServer) await proxyServer.stop();
+    await credentialServer.stop();
     await approvalServer.stop();
     await app.stop();
     closeDb();

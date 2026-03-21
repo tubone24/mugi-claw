@@ -43,7 +43,7 @@
 
 ;; Network: localhost only (Chrome CDP:9222, proxy:18080, approval:3456)
 (allow network-outbound (remote ip "localhost:*"))
-(allow network-outbound (remote tcp "127.0.0.1:*"))
+(allow network-outbound (remote tcp "localhost:*"))
 (allow network-outbound (remote unix-socket))
 (allow network-inbound)
 

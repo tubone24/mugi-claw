@@ -5,10 +5,14 @@ import { writeFile, mkdir } from 'node:fs/promises';
 import { chromium, type Browser, type Page } from 'playwright';
 
 const DEFAULT_CDP_URL = 'http://127.0.0.1:9222';
-const SCREENSHOT_DIR = '/tmp/mugi-claw/screenshots';
+const SCREENSHOT_DIR_BASE = '/tmp/mugi-claw/screenshots';
 const APPROVAL_PORT = process.env['APPROVAL_PORT'] ?? '3456';
 const APPROVAL_CHANNEL = process.env['APPROVAL_CHANNEL'] ?? '';
 const APPROVAL_THREAD_TS = process.env['APPROVAL_THREAD_TS'] ?? '';
+
+// スレッドごとにスクリーンショットディレクトリを分離
+const THREAD_ID = APPROVAL_THREAD_TS.replace(/\./g, '-') || 'default';
+const SCREENSHOT_DIR = `${SCREENSHOT_DIR_BASE}/${THREAD_ID}`;
 
 /** スクリーンショットを内部APIでSlackにアップロードする */
 async function uploadScreenshotToSlack(filePath: string): Promise<void> {
@@ -31,7 +35,7 @@ async function uploadScreenshotToSlack(filePath: string): Promise<void> {
 let browser: Browser | null = null;
 let page: Page | null = null;
 
-/** CDP経由でブラウザに接続し、操作用のPageを取得する */
+/** CDP経由でブラウザに接続し、このプロセス専用のPageを取得する */
 async function getPage(): Promise<Page> {
   if (page && !page.isClosed()) {
     return page;
@@ -42,17 +46,9 @@ async function getPage(): Promise<Page> {
     browser = await chromium.connectOverCDP(cdpUrl);
   }
 
-  // 既存のコンテキストの最初のページを使用。なければ新規作成
+  // 各MCPプロセスは専用の新しいページ（タブ）を作成する
+  // これにより複数スレッドが同時にブラウザを操作しても干渉しない
   const contexts = browser.contexts();
-  if (contexts.length > 0) {
-    const pages = contexts[0]!.pages();
-    if (pages.length > 0) {
-      page = pages[0]!;
-      return page;
-    }
-  }
-
-  // ページがなければ新規作成
   const context = contexts[0] ?? (await browser.newContext());
   page = await context.newPage();
   return page;
@@ -368,14 +364,18 @@ export async function startMcpServer(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  // プロセス終了時にブラウザを切断
+  // プロセス終了時に専用ページを閉じてブラウザを切断
   const cleanup = async (): Promise<void> => {
+    // 先にこのプロセスが作成したページ（タブ）を閉じる
+    if (page && !page.isClosed()) {
+      await page.close().catch(() => {});
+      page = null;
+    }
     if (browser) {
       // connectOverCDP の場合は close ではなく disconnect で切断
       // （Chromeプロセスは終了させない）
       browser.close().catch(() => {});
       browser = null;
-      page = null;
     }
   };
 

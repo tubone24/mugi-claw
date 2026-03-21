@@ -28,11 +28,23 @@ export class TaskRunner {
       const ownerProfile = this.profileStore.getProfile(this.config.owner.slackUserId);
       const ownerMemories = this.profileStore.getMemories(this.config.owner.slackUserId, 20);
 
+      const schedulerInstruction = [
+        '【スケジュールタスク実行モード】',
+        'このタスクはスケジュール実行されています。',
+        'タスクの結果はシステムが自動的にSlack DMまたは指定チャンネルに通知します。',
+        '以下のことは絶対にしないでください：',
+        '- Slack APIを直接呼び出してメッセージを送信する',
+        '- .envファイルやトークンを読み取る',
+        '- DMやチャンネルへの投稿スクリプトを自作する',
+        '- curl等でSlack APIにリクエストを送る',
+        'タスクの結果をテキストとして出力するだけでOKです。システムが自動で通知します。',
+      ].join('\n');
+
       const taskPrompt = buildPrompt(
         {
           channel: '',
           threadTs: '',
-          userMessage: task.taskPrompt,
+          userMessage: `${schedulerInstruction}\n\n${task.taskPrompt}`,
           userId: this.config.owner.slackUserId,
           threadMessages: [],
           searchResults: [],

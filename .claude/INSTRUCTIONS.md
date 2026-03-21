@@ -27,7 +27,6 @@
 ## Hooks
 - **Langfuse**: 全イベントのトレーシング（`~/.claude/.env` に LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY を設定）
 - **Slack通知**: 許可リクエスト時のWebhook通知（`~/.claude/.env` に SLACK_WEBHOOK_URL を設定）
-- **Obsidian**: セッション終了時のノートエクスポート（OBSIDIAN_VAULT_PATH を設定）
 - **macOS通知**: 許可リクエスト・セッション終了時の通知音
 - **コンテキストスナップショット**: Stop時にgit状態を保存
 

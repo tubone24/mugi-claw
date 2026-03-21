@@ -571,68 +571,128 @@ npm start
 | `LOG_LEVEL` | No | `info` | Log level (`fatal`/`error`/`warn`/`info`/`debug`/`trace`) |
 | `NODE_ENV` | No | `development` | Environment (`development`/`production`/`test`) |
 
-## Seatbelt Sandbox
+## Seatbelt Sandbox & Network Proxy
 
-macOS Seatbelt sandboxes the Claude Code CLI execution. Unlike Docker, it maintains direct access to the host Chrome CDP session on `localhost:9222`.
+mugi-claw uses macOS Seatbelt (`sandbox-exec`) and an HTTP CONNECT proxy to isolate Claude Code CLI execution. Unlike Docker, the sandbox maintains direct access to the host Chrome CDP session on `localhost:9222`.
 
-### Enable
+### Architecture
 
-Add to `.env`:
-
-```bash
-SANDBOX_ENABLED=true
-```
-
-### How It Works
+Seatbelt and the network proxy work together as a two-layer defense:
 
 ```mermaid
-graph LR
+graph TD
     subgraph Host["Host macOS"]
-        Chrome["Chrome<br/>CDP :9222"]
+        Chrome["Chrome CDP :9222"]
+        Approval["Approval Server :3456"]
+        Credential["Credential Server :3457"]
 
         subgraph SB["Seatbelt Sandbox"]
-            CLI["Claude Code CLI<br/>+ MCP Servers"]
+            CLI["Claude Code CLI"]
+            MCP["MCP Servers<br/>(browser, desktop)"]
+            Bash["Bash subprocesses<br/>(curl, npm, etc.)"]
         end
 
-        Proxy["Network Proxy<br/>:18080"]
+        Proxy["Network Proxy :18080"]
     end
 
     subgraph External["Internet"]
-        Allowed["Whitelisted<br/>Domains"]
-        Blocked["Unknown<br/>Domains"]
+        WL["Whitelisted Domains<br/>github.com, api.anthropic.com, ..."]
+        Unknown["Unknown Domains"]
     end
 
-    CLI -->|"localhost TCP (direct)"| Chrome
-    CLI -->|"HTTP_PROXY / HTTPS_PROXY"| Proxy
-    Proxy -->|"✅ auto-pass"| Allowed
-    Proxy -->|"🔒 Slack approval"| Blocked
+    CLI --> MCP
+    CLI --> Bash
+    CLI -->|"localhost (direct)"| Chrome
+    CLI -->|"localhost (direct)"| Approval
+    CLI -->|"localhost (direct)"| Credential
+    Bash -->|"HTTP_PROXY"| Proxy
+    Bash -.->|"curl --noproxy, nc, etc."| SB
+    SB -.->|"EPERM (kernel block)"| External
+    Proxy -->|"auto-pass"| WL
+    Proxy -->|"Slack approval"| Unknown
 
     style SB fill:#fff3cd,stroke:#ffc107
     style Proxy fill:#d4edda,stroke:#28a745
 ```
 
-**Filesystem restrictions:**
-- **Write**: project directory + `~/.mugi-claw` + `/tmp` only
-- **Read**: blocks `~/.ssh`, `~/.aws`, `~/.gnupg` (via deny-default policy)
-- **Network**: localhost only (Chrome CDP:9222, Proxy:18080, Approval:3456)
-- **External traffic**: routed through whitelist proxy
+**Layer 1 — Seatbelt (OS-level, kernel-enforced):**
+- Blocks all external network at the kernel level — only `localhost` connections are allowed
+- Denies access to sensitive files (`~/.ssh`, `~/.aws`, `~/.gnupg`)
+- Cannot be bypassed by any subprocess, even with `--noproxy` or direct sockets
 
-### Network Whitelist
+**Layer 2 — Network Proxy (application-level):**
+- All HTTP/HTTPS traffic is forced through `localhost:18080` via `HTTP_PROXY`/`HTTPS_PROXY` env vars
+- Whitelisted domains pass through automatically
+- Unknown domains trigger a Slack approval flow
+- Provides human-in-the-loop control over network access
 
-External domain access is controlled via Slack approval:
+**Why both layers?**
 
-- **Auto-pass**: `github.com`, `api.anthropic.com`, `slack.com`, `registry.npmjs.org` (configurable via `DEFAULT_WHITELIST`)
-- **Approval flow**: Unregistered domains trigger Slack approval buttons in the thread:
-  - **Allow Once** — temporary in-memory permit, cleared on restart
-  - **Allow Permanent** — saved to SQLite, persists across restarts
-  - **Deny** — blocks the request
-- Only the owner (`OWNER_SLACK_USER_ID`) can approve
-- 10-minute timeout → auto-deny
-- Wildcard support (e.g., `*.googleapis.com`)
+| Attack Vector | Seatbelt Only | Proxy Only | Both |
+|---------------|:---:|:---:|:---:|
+| `curl https://evil.com` | Blocked | Blocked (not whitelisted) | Blocked |
+| `curl --noproxy '*' https://evil.com` | Blocked | **Bypassed** | Blocked |
+| `nc evil.com 443` | Blocked | **Bypassed** | Blocked |
+| `python3 -c "socket.connect(...)"` | Blocked | **Bypassed** | Blocked |
+
+Without Seatbelt, any subprocess that ignores `HTTP_PROXY` can connect directly to the internet. Seatbelt ensures all external connections are blocked at the kernel level, making the proxy the only possible exit path.
+
+### How the Network Proxy Works
+
+The proxy is an HTTP CONNECT tunnel server (`src/network/proxy-server.ts`).
+
+```
+Claude CLI subprocess (curl, npm, etc.)
+  |
+  | CONNECT evil.com:443
+  v
+Proxy Server (localhost:18080)
+  |
+  v
+WhitelistStore.isAllowed(hostname)?
+  |
+  ├─ YES (default whitelist / temporary / permanent)
+  |    → TCP tunnel established → 200 Connection Established
+  |
+  └─ NO
+       |
+       v
+     Has session context (Slack thread)?
+       |
+       ├─ NO → 403 Forbidden (auto-deny)
+       |
+       └─ YES → Slack approval message posted to thread
+                  |
+                  ├─ "Allow Once"      → temporary permit (memory, cleared on restart)
+                  ├─ "Allow Permanent" → saved to SQLite, persists across restarts
+                  └─ "Deny"            → 403 Forbidden
+
+                  (10-minute timeout → auto-deny)
+```
+
+**Whitelist resolution order** (`src/network/whitelist-store.ts`):
+
+1. **Default whitelist** — configured via `DEFAULT_WHITELIST` env var. Wildcard support (e.g., `*.googleapis.com`)
+2. **Temporary permits** — in-memory Set, cleared on restart
+3. **Permanent permits** — stored in SQLite (`~/.mugi-claw/mugi-claw.db`), loaded into cache on startup
+
+**Default whitelisted domains:**
+
+| Domain | Purpose |
+|--------|---------|
+| `registry.npmjs.org` | npm package installs |
+| `github.com` | Git operations |
+| `api.anthropic.com` | Claude API |
+| `platform.claude.com` | Claude CLI auth/telemetry |
+| `cloud.langfuse.com` | Langfuse tracing |
+| `*.datadoghq.com` | Datadog logging |
+| `slack.com` | Slack API |
+
+Configurable via `DEFAULT_WHITELIST` env var (comma-separated).
 
 ### Setup
 
-1. **Find your Claude CLI path** and set it in `.env`:
+1. **Find your Claude CLI absolute path** and set it in `.env`:
 
 ```bash
 which claude
@@ -645,60 +705,105 @@ SANDBOX_ENABLED=true
 CLAUDE_CLI_PATH=/Users/yourname/.local/bin/claude
 ```
 
-> `sandbox-exec` requires an absolute path — the default `claude` (relative) will fail with `execvp() failed: No such file or directory` (exit code 71).
+> `sandbox-exec` requires an absolute path. The default `claude` (relative) will fail with exit code 71.
 
 2. **Update paths in the Seatbelt profile** to match your `$HOME`:
 
 ```bash
-# Replace all occurrences in sandbox/mugi-claw.sb
 sed -i '' "s|/Users/tubone24|$HOME|g" sandbox/mugi-claw.sb
 ```
 
-3. **Verify the profile syntax**:
+3. **Verify the profile**:
 
 ```bash
-sandbox-exec -f sandbox/mugi-claw.sb /bin/true && echo "OK"
+sandbox-exec -f sandbox/mugi-claw.sb /path/to/claude --version
 ```
 
-### Customize the Seatbelt Profile
+### Seatbelt Profile Design
 
-Edit `sandbox/mugi-claw.sb` to adjust filesystem and network permissions.
-
-**Adding read/write access for a directory:**
+The profile uses an **allow-default** strategy with targeted deny rules:
 
 ```scheme
-;; File read
-(allow file-read* (subpath "/Users/yourname/path/to/dir"))
+(version 1)
+(allow default)                          ;; Allow everything by default
 
-;; File write (only if needed)
-(allow file-write* (subpath "/Users/yourname/path/to/dir"))
+;; Network: block external, allow localhost
+(deny network-outbound (remote ip "*:*"))
+(allow network-outbound (remote ip "localhost:*"))
+(allow network-outbound (remote tcp "localhost:*"))
+(allow network-outbound (remote unix-socket))
+(allow network-inbound)
+(allow network-outbound (remote udp "*:53"))  ;; DNS
+
+;; Filesystem: block sensitive paths
+(deny file-read*  (subpath "/Users/yourname/.ssh"))
+(deny file-read*  (subpath "/Users/yourname/.aws"))
+(deny file-read*  (subpath "/Users/yourname/.gnupg"))
+(deny file-write* (subpath "/Users/yourname/.ssh"))
+(deny file-write* (subpath "/Users/yourname/.aws"))
+(deny file-write* (subpath "/Users/yourname/.gnupg"))
 ```
 
-**Seatbelt rules:**
+**Why `(allow default)` instead of `(deny default)`?**
+
+`(deny default)` requires explicitly allowing every operation the process needs (file reads, shared library loading, mach lookups, process info, etc.). The Claude CLI binary is complex (x86_64 Mach-O running via Rosetta on Apple Silicon) and needs many low-level system operations that are difficult to enumerate. `(allow default)` avoids this complexity while still enforcing the critical restrictions (network + sensitive files).
+
+**Adding access for additional directories:**
+
+```scheme
+;; Example: allow access to an Obsidian vault
+(deny file-read*  (subpath "/Users/yourname/Documents/vault"))
+;; ↑ Use deny rules to BLOCK paths. Everything else is allowed by default.
+```
+
+**Seatbelt syntax rules:**
 
 | Rule | Description |
 |------|-------------|
-| `(deny default)` | Deny everything by default |
-| `(allow file-read* (subpath "..."))` | Allow read access to a directory tree |
-| `(allow file-write* (subpath "..."))` | Allow write access to a directory tree |
-| `(allow network-outbound (remote ip "localhost:*"))` | Allow outbound connections to localhost |
-| `(allow network-outbound (remote unix-socket))` | Allow Unix socket connections |
+| `(allow default)` | Allow everything not explicitly denied |
+| `(deny network-outbound (remote ip "*:*"))` | Block all external network |
+| `(allow network-outbound (remote ip "localhost:*"))` | Allow localhost connections |
+| `(deny file-read* (subpath "..."))` | Block read access to a directory tree |
+| `(deny file-write* (subpath "..."))` | Block write access to a directory tree |
 
-> **Important:** Network host must be `*` or `localhost` — IP addresses like `127.0.0.1` are not allowed and will cause exit code 65.
+> **Important:** Network host must be `*` or `localhost` — IP addresses like `127.0.0.1` cause exit code 65.
+
+### Proxy Environment Variables
+
+When `SANDBOX_ENABLED=true`, `claude-runner.ts` automatically injects:
+
+```
+HTTP_PROXY=http://localhost:18080
+HTTPS_PROXY=http://localhost:18080
+```
+
+These are inherited by all subprocesses (curl, wget, npm, etc.). Combined with Seatbelt's network restriction, this forces all external HTTP/HTTPS traffic through the proxy.
 
 ### Troubleshooting
 
-| Exit Code | Error | Cause | Fix |
-|-----------|-------|-------|-----|
-| 65 | `host must be * or localhost in network address` | IP address used in network rule | Use `localhost` instead of `127.0.0.1` |
-| 71 | `execvp() of 'claude' failed: No such file or directory` | Relative CLI path | Set `CLAUDE_CLI_PATH` to absolute path |
-| 65 | Permission denied during init | `~/.claude` not writable | Add `(allow file-write* (subpath "~/.claude"))` |
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Exit code 65: `host must be * or localhost` | IP address in network rule | Use `localhost` instead of `127.0.0.1` |
+| Exit code 71: `execvp() failed: No such file or directory` | Relative CLI path | Set `CLAUDE_CLI_PATH` to absolute path (`which claude`) |
+| `zsh: abort` on `sandbox-exec` | Missing system permissions | Use `(allow default)` strategy instead of `(deny default)` |
+| `code: null` + bot hangs | Process killed by signal, error not emitted | Fixed in `claude-runner.ts` — signal kills now emit errors |
+| `No session context - denying network access` | Domain not in whitelist + no Slack thread | Add domain to `DEFAULT_WHITELIST` |
+| `Network access denied` for known domain | Missing from default whitelist | Add to `DEFAULT_WHITELIST` env var |
 
-**Debug Seatbelt blocks:**
+**Debug commands:**
 
 ```bash
-# Watch for sandbox violations in real-time
+# Watch for Seatbelt violations
 log stream --style compact --predicate 'sender=="Sandbox"'
+
+# Test sandbox profile
+sandbox-exec -f sandbox/mugi-claw.sb /bin/true && echo "OK"
+
+# Check if Claude CLI works in sandbox
+sandbox-exec -f sandbox/mugi-claw.sb /path/to/claude --version
+
+# Verify proxy is running
+lsof -i :18080
 ```
 
 ## Browser Automation

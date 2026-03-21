@@ -1,7 +1,7 @@
 ;; mugi-claw Seatbelt Sandbox Profile
 ;; NOTE: Paths containing /Users/tubone24 must be updated to match your $HOME
 (version 1)
-(deny default (with report))
+(deny default)
 
 ;; System basics
 (allow sysctl-read)

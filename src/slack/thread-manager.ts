@@ -8,6 +8,7 @@ import { convertMarkdown } from './markdown-converter.js';
 
 const SLACK_MAX_LENGTH = 4000;
 const UPDATE_DEBOUNCE_MS = 2000;
+const STATUS_TEXT_MAX_LENGTH = 100;
 
 export class ThreadManager {
   private statusMessageTs: string | null = null;
@@ -35,8 +36,11 @@ export class ThreadManager {
     if (update.type === 'tool_use' && update.toolName) {
       this.currentStatus = this.getToolEmoji(update.toolName) + ' ' + update.content;
     } else if (update.type === 'text') {
-      // テキスト更新は最終結果で使うため、ステータスバーには反映しない
-      return;
+      // 途中のテキストをステータスバーに表示
+      const truncated = update.content.length > STATUS_TEXT_MAX_LENGTH
+        ? update.content.slice(0, STATUS_TEXT_MAX_LENGTH) + '...'
+        : update.content;
+      this.currentStatus = '\u{1F4AC} ' + truncated;
     }
 
     // デバウンス（Slack API レート制限対応: update 3回/秒）

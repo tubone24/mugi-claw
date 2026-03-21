@@ -13,6 +13,8 @@ interface StreamParserEvents {
 
 export class StreamParser extends EventEmitter {
   private buffer = '';
+  /** subtype 付き assistant イベントを受信済みか（重複 emit 防止用） */
+  private receivedSubtypedAssistant = false;
 
   constructor() {
     super();
@@ -80,14 +82,45 @@ export class StreamParser extends EventEmitter {
 
       case 'assistant':
         if (subtype === 'text') {
+          this.receivedSubtypedAssistant = true;
           this.emit('text', {
             message: event['message'] as string,
           });
         } else if (subtype === 'tool_use') {
+          this.receivedSubtypedAssistant = true;
           this.emit('tool_use', {
             tool: event['tool'] as string,
             input: (event['input'] as Record<string, unknown>) ?? {},
           });
+        } else if (!this.receivedSubtypedAssistant && event['message'] && typeof event['message'] === 'object') {
+          // Claude CLI stream-json のフルメッセージ形式（subtype なし）
+          // subtype 付きイベントが来ていない場合のみ処理（重複 emit 防止）
+          const msg = event['message'] as Record<string, unknown>;
+          const contentRaw = msg['content'];
+          const content = Array.isArray(contentRaw)
+            ? (contentRaw as Array<Record<string, unknown>>)
+            : undefined;
+          if (content) {
+            // テキストコンテンツを抽出して emit
+            const textParts = content
+              .filter(c => c['type'] === 'text')
+              .map(c => c['text'] as string);
+            const text = textParts.join('');
+            if (text) {
+              this.emit('text', { message: text });
+            }
+
+            // tool_use コンテンツブロックも emit
+            for (const block of content) {
+              if (block['type'] === 'tool_use') {
+                const toolName = typeof block['name'] === 'string' ? block['name'] : 'unknown';
+                this.emit('tool_use', {
+                  tool: toolName,
+                  input: (block['input'] as Record<string, unknown>) ?? {},
+                });
+              }
+            }
+          }
         }
         break;
 

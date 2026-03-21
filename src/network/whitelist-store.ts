@@ -3,6 +3,7 @@ import type { WhitelistEntry } from '../types.js';
 
 export class WhitelistStore {
   private temporarySet = new Set<string>();
+  private permanentCache = new Set<string>();
   private defaultWhitelist: string[];
 
   constructor(defaultWhitelist: string[] = []) {
@@ -10,7 +11,16 @@ export class WhitelistStore {
   }
 
   private makeKey(hostname: string, port?: number): string {
-    return port ? `${hostname}:${port}` : hostname;
+    return port != null ? `${hostname}:${port}` : `${hostname}:*`;
+  }
+
+  private matchesDefault(hostname: string): boolean {
+    for (const pattern of this.defaultWhitelist) {
+      if (this.matchesWildcard(hostname, pattern)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private matchesWildcard(hostname: string, pattern: string): boolean {
@@ -21,26 +31,28 @@ export class WhitelistStore {
     return hostname === pattern;
   }
 
-  isAllowed(hostname: string, port?: number): boolean {
-    // Check default whitelist (supports wildcard like *.googleapis.com)
-    for (const pattern of this.defaultWhitelist) {
-      if (this.matchesWildcard(hostname, pattern)) {
-        return true;
-      }
-    }
-
-    // Check temporary (in-memory) set
-    if (this.temporarySet.has(this.makeKey(hostname, port)) || this.temporarySet.has(hostname)) {
-      return true;
-    }
-
-    // Check DB
+  loadCache(): void {
+    this.permanentCache.clear();
     const db = getDb();
-    const row = db.prepare(
-      `SELECT id FROM network_whitelist WHERE hostname = ? AND (port IS NULL OR port = ?)`,
-    ).get(hostname, port ?? null) as { id: number } | undefined;
+    const rows = db.prepare(`SELECT hostname, port FROM network_whitelist`).all() as Array<{
+      hostname: string;
+      port: number | null;
+    }>;
+    for (const row of rows) {
+      this.permanentCache.add(this.makeKey(row.hostname, row.port ?? undefined));
+    }
+  }
 
-    return !!row;
+  isAllowed(hostname: string, port?: number): boolean {
+    // 1. デフォルトホワイトリスト（ワイルドカード対応）
+    if (this.matchesDefault(hostname)) return true;
+    // 2. 一時許可
+    if (this.temporarySet.has(`${hostname}:${port ?? '*'}`)) return true;
+    if (this.temporarySet.has(`${hostname}:*`)) return true;
+    // 3. 永続キャッシュ
+    if (this.permanentCache.has(`${hostname}:${port ?? '*'}`)) return true;
+    if (this.permanentCache.has(`${hostname}:*`)) return true;
+    return false;
   }
 
   addTemporary(hostname: string, port?: number, _purpose?: string): void {
@@ -53,10 +65,13 @@ export class WhitelistStore {
       `INSERT OR REPLACE INTO network_whitelist (hostname, port, is_permanent, approved_by, purpose)
        VALUES (?, ?, 1, ?, ?)`,
     ).run(hostname, port ?? null, approvedBy, purpose ?? null);
+    this.permanentCache.add(this.makeKey(hostname, port));
   }
 
   remove(hostname: string, port?: number): void {
-    this.temporarySet.delete(this.makeKey(hostname, port));
+    const key = this.makeKey(hostname, port);
+    this.temporarySet.delete(key);
+    this.permanentCache.delete(key);
     const db = getDb();
     if (port != null) {
       db.prepare(`DELETE FROM network_whitelist WHERE hostname = ? AND port = ?`).run(hostname, port);
@@ -117,16 +132,13 @@ export class WhitelistStore {
   }
 
   seedDefaults(): void {
-    const defaults = [
-      'registry.npmjs.org',
-      'github.com',
-      'api.anthropic.com',
-      'slack.com',
-    ];
-    for (const hostname of defaults) {
-      if (!this.defaultWhitelist.includes(hostname)) {
-        this.defaultWhitelist.push(hostname);
-      }
+    const db = getDb();
+    for (const hostname of this.defaultWhitelist) {
+      db.prepare(
+        `INSERT OR IGNORE INTO network_whitelist (hostname, port, is_permanent, approved_by, purpose)
+         VALUES (?, NULL, 1, 'system', 'default whitelist')`,
+      ).run(hostname);
     }
+    this.loadCache();
   }
 }

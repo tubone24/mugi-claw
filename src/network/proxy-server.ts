@@ -13,6 +13,8 @@ interface SessionContext {
 export class ProxyServer {
   private server: http.Server;
   private sessionContext: SessionContext | null = null;
+  private activeConnections = 0;
+  private readonly MAX_CONNECTIONS = 50;
 
   constructor(
     private whitelistStore: WhitelistStore,
@@ -59,6 +61,12 @@ export class ProxyServer {
     clientSocket: net.Socket,
     head: Buffer,
   ): Promise<void> {
+    if (this.activeConnections >= this.MAX_CONNECTIONS) {
+      clientSocket.end('HTTP/1.1 503 Service Unavailable\r\n\r\n');
+      return;
+    }
+    this.activeConnections++;
+
     const urlParts = (req.url ?? '').split(':');
     const hostname = urlParts[0] ?? '';
     const port = parseInt(urlParts[1] ?? '', 10) || 443;
@@ -71,6 +79,7 @@ export class ProxyServer {
       this.logger.warn({ hostname, port }, 'Network access denied');
       clientSocket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
       clientSocket.end();
+      this.activeConnections--;
       return;
     }
 
@@ -83,6 +92,11 @@ export class ProxyServer {
       clientSocket.pipe(serverSocket);
     });
 
+    serverSocket.setTimeout(300_000);
+    clientSocket.setTimeout(300_000);
+    serverSocket.on('timeout', () => serverSocket.destroy());
+    clientSocket.on('timeout', () => clientSocket.destroy());
+
     serverSocket.on('error', (err) => {
       this.logger.error({ err, hostname, port }, 'Tunnel connection error');
       clientSocket.end();
@@ -92,12 +106,23 @@ export class ProxyServer {
       this.logger.error({ err, hostname, port }, 'Client socket error');
       serverSocket.end();
     });
+
+    serverSocket.on('close', () => { this.activeConnections--; });
   }
 
   private async handleRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    const socket = req.socket;
+    if (this.activeConnections >= this.MAX_CONNECTIONS) {
+      res.writeHead(503);
+      res.end('Service Unavailable');
+      return;
+    }
+    this.activeConnections++;
+
     if (!req.url) {
       res.writeHead(400);
       res.end('Bad Request');
+      this.activeConnections--;
       return;
     }
 
@@ -107,6 +132,7 @@ export class ProxyServer {
     } catch {
       res.writeHead(400);
       res.end('Bad Request: Invalid URL');
+      this.activeConnections--;
       return;
     }
 
@@ -121,10 +147,19 @@ export class ProxyServer {
       this.logger.warn({ hostname, port }, 'Network access denied');
       res.writeHead(403);
       res.end('Forbidden: Network access not approved');
+      this.activeConnections--;
       return;
     }
 
     this.logger.info({ hostname, port, method: req.method }, 'Network access allowed - proxying');
+
+    socket.setTimeout(300_000);
+    socket.on('timeout', () => socket.destroy());
+
+    const headers = { ...req.headers };
+    delete headers['proxy-authorization'];
+    delete headers['proxy-connection'];
+    // hostヘッダーはそのまま維持
 
     const proxyReq = http.request(
       {
@@ -132,7 +167,7 @@ export class ProxyServer {
         port,
         path: targetUrl.pathname + targetUrl.search,
         method: req.method,
-        headers: req.headers,
+        headers,
       },
       (proxyRes) => {
         res.writeHead(proxyRes.statusCode ?? 500, proxyRes.headers);
@@ -145,6 +180,8 @@ export class ProxyServer {
       res.writeHead(502);
       res.end('Bad Gateway');
     });
+
+    res.on('close', () => { this.activeConnections--; });
 
     req.pipe(proxyReq);
   }

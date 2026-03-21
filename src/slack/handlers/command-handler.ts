@@ -33,6 +33,7 @@ export function registerCommandHandler(
           const result = await handleScheduleCommand(subArgs, taskStore, scheduler, settingsStore, {
             triggerId: command.trigger_id,
             client,
+            userId: command.user_id,
           });
           if (result) {
             await respond(result);

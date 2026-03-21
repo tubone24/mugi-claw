@@ -27,6 +27,7 @@ export function registerHomeTabHandler(
       const isOwner = userId === config.owner.slackUserId;
       const profile = profileStore.getProfile(userId);
       const tasks = taskStore.getTasksByUser(userId);
+      logger.debug({ userId, taskCount: tasks.length }, 'Home tab tasks loaded');
       const recentRuns = taskStore.getRecentRunsByUser(userId, 5);
       const currentModel = settingsStore.getModel();
 
@@ -313,11 +314,15 @@ export function registerHomeTabHandler(
 
     try {
       const entries = whitelistStore?.list() ?? [];
-      const entryLines = entries.slice(0, 20).map(e => {
+      const displayEntries = entries.slice(0, 20);
+      const entryLines = displayEntries.map(e => {
         const port = e.port ? `:${e.port}` : '';
         const perm = e.isPermanent ? '(permanent)' : '(temp)';
         return `• \`${e.hostname}${port}\` ${perm}`;
       });
+      if (entries.length > 20) {
+        entryLines.push(`_...他 ${entries.length - 20} 件_`);
+      }
 
       await client.views.open({
         trigger_id: (body as any).trigger_id,

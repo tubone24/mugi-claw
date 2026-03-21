@@ -117,17 +117,6 @@ export class WhitelistStore {
       });
     }
 
-    // Add default entries
-    for (const pattern of this.defaultWhitelist) {
-      entries.push({
-        hostname: pattern,
-        isPermanent: true,
-        approvedBy: 'system',
-        purpose: 'default whitelist',
-        createdAt: '',
-      });
-    }
-
     return entries;
   }
 

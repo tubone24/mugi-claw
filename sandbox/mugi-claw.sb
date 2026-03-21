@@ -8,11 +8,15 @@
 (allow mach-lookup)
 (allow ipc-posix-shm-read*)
 (allow ipc-posix-shm-write*)
+(allow process-info*)
 
 ;; Process execution
 (allow process-exec*)
 (allow process-fork)
 (allow signal)
+
+;; Shared library loading (required by dyld / Rosetta)
+(allow file-map-executable)
 
 ;; File read: restrict to necessary paths
 (allow file-read* (subpath "/Users/tubone24/project/mugi-claw"))

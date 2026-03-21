@@ -58,4 +58,16 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 
 INSERT OR IGNORE INTO settings (key, value) VALUES ('claude_model', 'sonnet');
+
+CREATE TABLE IF NOT EXISTS network_whitelist (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  hostname TEXT NOT NULL,
+  port INTEGER,
+  is_permanent INTEGER NOT NULL DEFAULT 0,
+  approved_by TEXT,
+  purpose TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  expires_at TEXT,
+  UNIQUE(hostname, port)
+);
 `;

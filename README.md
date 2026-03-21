@@ -7,6 +7,8 @@ Slack に常駐する AI アシスタント犬「むぎぼー」。@メンショ
 - **スケジュールタスク**: node-cron で定期タスクを自動実行（Gmail確認、レポート生成など）
 - **モデル切替**: Slack から `opus` / `sonnet` / `haiku` をグローバルに切り替え
 - **スラッシュコマンド**: `/mugiclaw` でプロフィール・スケジュール・メモリ・モデルを管理
+- **Seatbelt サンドボックス**: macOS Seatbelt でファイルシステム・ネットワークアクセスを制限
+- **ネットワークホワイトリスト**: 外部通信をプロキシ経由でホワイトリスト制御。Slack 承認ボタンで動的に許可ドメインを追加可能
 
 ## アーキテクチャ
 
@@ -33,11 +35,20 @@ Slack (Socket Mode)
                                      └→ Notifier (DM/チャンネル通知)
 
 SQLite (~/.mugi-claw/mugi-claw.db)
-  ├── user_profile     (マルチユーザー)
-  ├── user_memories    (ユーザーごとの記憶)
-  ├── scheduled_tasks  (定期タスク)
-  ├── task_runs        (実行履歴)
-  └── settings         (グローバル設定)
+  ├── user_profile        (マルチユーザー)
+  ├── user_memories       (ユーザーごとの記憶)
+  ├── scheduled_tasks     (定期タスク)
+  ├── task_runs           (実行履歴)
+  ├── settings            (グローバル設定)
+  └── network_whitelist   (外部通信の許可ドメイン)
+
+[Seatbelt Sandbox] (有効時)
+  ├── FS書き込み: プロジェクトDir + ~/.mugi-claw + /tmp のみ
+  ├── FS読み取り: ~/.ssh, ~/.aws, ~/.gnupg をブロック
+  ├── ネットワーク: localhost のみ直接接続可
+  └── 外部通信: Network Proxy (localhost:18080) 経由
+       ├── ホワイトリスト済み → 自動通過
+       └── 未登録 → Slack承認 [今回だけ許可] [永続許可] [拒否]
 ```
 
 ## 前提条件
@@ -120,8 +131,63 @@ npm start
 | `CLAUDE_MAX_TURNS` | No | `50` | Claude CLI の最大ターン数 (1-200) |
 | `CHROME_DEBUGGING_PORT` | No | `9222` | Chrome CDP ポート |
 | `CHROME_USER_DATA_DIR` | No | `~/.mugi-claw/chrome-profile` | Chrome ユーザーデータディレクトリ |
+| `PROXY_PORT` | No | `18080` | ネットワークプロキシポート |
+| `DEFAULT_WHITELIST` | No | `registry.npmjs.org,github.com,api.anthropic.com,slack.com` | 初期ホワイトリストドメイン（カンマ区切り） |
+| `SANDBOX_ENABLED` | No | `false` | Seatbelt サンドボックスの有効化 (`true`/`false`) |
+| `SANDBOX_PROFILE` | No | `sandbox/mugi-claw.sb` | Seatbelt プロファイルのパス |
 | `LOG_LEVEL` | No | `info` | ログレベル (`fatal`/`error`/`warn`/`info`/`debug`/`trace`) |
 | `NODE_ENV` | No | `development` | 環境 (`development`/`production`/`test`) |
+
+## セキュリティ（Seatbelt サンドボックス）
+
+macOS Seatbelt を使って Claude Code CLI の実行をサンドボックス化できる。Docker と違い、ホストの Chrome CDP セッション（localhost:9222）にそのままアクセス可能。
+
+### 有効化
+
+`.env` に以下を追加:
+
+```
+SANDBOX_ENABLED=true
+```
+
+### 仕組み
+
+```
+┌─────────────────────────────────────────────┐
+│  ホスト macOS                                │
+│                                             │
+│  Chrome (port 9222) ← ログインセッション維持  │
+│      ↑ localhost TCP (直接OK)               │
+│                                             │
+│  ┌───────────────────────────────────────┐  │
+│  │  Seatbelt Sandbox                     │  │
+│  │  Claude Code CLI + MCP servers        │  │
+│  │                                       │  │
+│  │  FS書込: プロジェクトDir + /tmp のみ    │  │
+│  │  FS読取: ~/.ssh, ~/.aws 等はブロック   │  │
+│  │  Net: localhost のみ直接接続           │  │
+│  └───────────────────────────────────────┘  │
+│      ↓                                      │
+│  Network Proxy (localhost:18080)             │
+│  → 外部通信はホワイトリスト制御               │
+└─────────────────────────────────────────────┘
+```
+
+### ネットワークホワイトリスト
+
+外部ドメインへのアクセスは Slack 承認フローで制御:
+
+- **自動通過**: `github.com`, `api.anthropic.com`, `slack.com`, `registry.npmjs.org` 等（`DEFAULT_WHITELIST` で設定）
+- **承認フロー**: 未登録ドメインへのアクセス時、Slack スレッドに承認ボタンが表示される
+  - **今回だけ許可**: プロセス終了で消える一時許可
+  - **永続許可**: DB に保存し次回以降も自動通過
+  - **拒否**: アクセスをブロック
+- 承認できるのはオーナー（`OWNER_SLACK_USER_ID`）のみ
+- 10分のタイムアウトで自動拒否
+
+### Seatbelt プロファイルのカスタマイズ
+
+`sandbox/mugi-claw.sb` を編集してファイルシステム・ネットワークの許可範囲を調整可能。
 
 ## ブラウザ操作（Google連携）
 
@@ -188,6 +254,7 @@ SQLite (`~/.mugi-claw/mugi-claw.db`) で以下を永続化:
 | `scheduled_tasks` | 定期実行タスクの定義 |
 | `task_runs` | タスク実行履歴 |
 | `settings` | グローバル設定（Claude モデルなど） |
+| `network_whitelist` | 外部通信の永続許可ドメイン |
 
 ## Docker で起動
 
@@ -302,9 +369,22 @@ src/
 │           ├── schedule-commands.ts
 │           ├── memory-commands.ts
 │           └── model-commands.ts
-└── browser/
-    ├── chrome-launcher.ts      # Chrome CDP 起動・管理
-    └── mcp-server.ts           # Playwright MCP Server
+├── network/
+│   ├── proxy-server.ts         # HTTP CONNECT プロキシ
+│   ├── whitelist-store.ts      # ホワイトリスト管理 (DB + メモリ)
+│   └── network-approval.ts     # Slack 承認フロー
+├── browser/
+│   ├── chrome-launcher.ts      # Chrome CDP 起動・管理
+│   └── mcp-server.ts           # Playwright MCP Server
+└── desktop/
+    └── mcp-server.ts           # macOS デスクトップ操作 MCP
+.claude/                        # ペルソナ・設定ファイル
+├── SOUL.md                     # ミッション・行動原則
+├── IDENTITY.md                 # 名前・語尾・トーン
+├── AGENTS.md                   # スキル・MCPツール定義
+└── INSTRUCTIONS.md             # セキュリティ・実行ルール
+sandbox/                        # Seatbelt サンドボックス設定
 skills/                         # Claude Code Skills（手順書）
 docker/                         # Docker 設定
+docs/                           # 設計ドキュメント
 ```

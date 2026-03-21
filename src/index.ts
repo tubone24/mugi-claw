@@ -14,6 +14,9 @@ import { Notifier } from './slack/notifier.js';
 import { ApprovalManager } from './approval/approval-manager.js';
 import { ApprovalServer } from './approval/approval-server.js';
 import { registerApprovalHandlers } from './approval/register-handlers.js';
+import { WhitelistStore } from './network/whitelist-store.js';
+import { NetworkApprovalManager } from './network/network-approval.js';
+import { ProxyServer } from './network/proxy-server.js';
 import pino from 'pino';
 
 const config = loadConfig();
@@ -47,6 +50,17 @@ async function main() {
   const approvalServer = new ApprovalServer(approvalManager, app.client, config.approval.port, logger);
   await approvalServer.start();
   registerApprovalHandlers(app, approvalManager, logger);
+
+  // 4.6. ネットワークプロキシ初期化（sandbox有効時）
+  let proxyServer: ProxyServer | null = null;
+  if (config.sandbox.enabled) {
+    const whitelistStore = new WhitelistStore(config.network.defaultWhitelist);
+    whitelistStore.seedDefaults();
+    const networkApproval = new NetworkApprovalManager(app, config.owner.slackUserId, logger);
+    proxyServer = new ProxyServer(whitelistStore, networkApproval, config.network.proxyPort, logger);
+    await proxyServer.start();
+    logger.info({ port: config.network.proxyPort }, 'Network proxy started');
+  }
 
   // 5. Notifier, TaskRunner, Scheduler作成
   const notifier = new Notifier(app.client, config, logger);
@@ -111,6 +125,7 @@ async function main() {
   const shutdown = async () => {
     logger.info('mugi-claw を停止するわん...');
     scheduler.shutdown();
+    if (proxyServer) await proxyServer.stop();
     await approvalServer.stop();
     await app.stop();
     closeDb();

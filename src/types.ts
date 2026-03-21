@@ -161,8 +161,28 @@ export interface AppConfig {
   approval: {
     port: number;
   };
+  network: {
+    proxyPort: number;
+    defaultWhitelist: string[];
+  };
+  sandbox: {
+    enabled: boolean;
+    profile: string;
+  };
   owner: {
     slackUserId: string;
   };
   logLevel: string;
+}
+
+// Network whitelist
+export interface WhitelistEntry {
+  id?: number;
+  hostname: string;
+  port?: number;
+  isPermanent: boolean;
+  approvedBy?: string;
+  purpose?: string;
+  createdAt: string;
+  expiresAt?: string;
 }

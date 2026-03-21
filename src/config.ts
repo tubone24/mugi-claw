@@ -14,6 +14,10 @@ const envSchema = z.object({
   CHROME_USER_DATA_DIR: z.string().default('~/.mugi-claw/chrome-profile'),
   DB_PATH: z.string().default('~/.mugi-claw/mugi-claw.db'),
   OWNER_SLACK_USER_ID: z.string().min(1),
+  PROXY_PORT: z.coerce.number().int().default(18080),
+  SANDBOX_ENABLED: z.string().default('false'),
+  SANDBOX_PROFILE: z.string().default('sandbox/mugi-claw.sb'),
+  DEFAULT_WHITELIST: z.string().default('registry.npmjs.org,github.com,api.anthropic.com,slack.com'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 });
@@ -41,6 +45,14 @@ export function loadConfig(): AppConfig {
     },
     approval: {
       port: env.APPROVAL_PORT,
+    },
+    network: {
+      proxyPort: env.PROXY_PORT,
+      defaultWhitelist: env.DEFAULT_WHITELIST.split(','),
+    },
+    sandbox: {
+      enabled: env.SANDBOX_ENABLED === 'true',
+      profile: env.SANDBOX_PROFILE,
     },
     owner: {
       slackUserId: env.OWNER_SLACK_USER_ID,

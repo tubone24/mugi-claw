@@ -67,9 +67,27 @@ export class ClaudeRunner {
 
     this.logger.info({ args: args.filter((_, i) => i !== 1) }, 'Claude CLI 起動'); // promptは除外してログ
 
-    const child = spawn(this.config.claude.cliPath, args, {
+    // Sandbox mode: wrap with sandbox-exec
+    const command = this.config.sandbox.enabled
+      ? 'sandbox-exec'
+      : this.config.claude.cliPath;
+
+    const spawnArgs = this.config.sandbox.enabled
+      ? ['-f', this.config.sandbox.profile, this.config.claude.cliPath, ...args]
+      : args;
+
+    // Add proxy env vars when sandbox is enabled
+    const proxyEnv = this.config.sandbox.enabled
+      ? {
+          HTTP_PROXY: `http://localhost:${this.config.network.proxyPort}`,
+          HTTPS_PROXY: `http://localhost:${this.config.network.proxyPort}`,
+        }
+      : {};
+
+    const child = spawn(command, spawnArgs, {
       env: {
         ...process.env,
+        ...proxyEnv,
         MUGI_CLAW_APPROVAL: '1',
         APPROVAL_PORT: String(this.config.approval.port),
         ...(approvalContext ? {

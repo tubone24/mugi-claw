@@ -43,7 +43,10 @@ async function getPage(): Promise<Page> {
 
   if (!browser || !browser.isConnected()) {
     const cdpUrl = process.env['CDP_URL'] ?? DEFAULT_CDP_URL;
-    browser = await chromium.connectOverCDP(cdpUrl);
+    // Chrome 146以降はHTTP URLよりWebSocket URLを直接使うほうが安定
+    const res = await fetch(`${cdpUrl}/json/version`);
+    const data = (await res.json()) as { webSocketDebuggerUrl: string };
+    browser = await chromium.connectOverCDP(data.webSocketDebuggerUrl);
   }
 
   // 各MCPプロセスは専用の新しいページ（タブ）を作成する

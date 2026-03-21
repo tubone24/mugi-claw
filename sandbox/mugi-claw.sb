@@ -1,9 +1,21 @@
 ;; mugi-claw Seatbelt Sandbox Profile
-;; Strategy: allow default, deny only sensitive filesystem paths.
-;; Network control is handled by Layer 2 (HTTP proxy + Slack approval flow).
+;; Strategy: allow default, deny external network + sensitive filesystem paths.
+;; External network is forced through HTTP proxy (Layer 2) for whitelist/approval control.
 ;; NOTE: Paths containing /Users/tubone24 must be updated to match your $HOME
 (version 1)
 (allow default)
+
+;; === Network: deny external, allow localhost only ===
+;; Forces all HTTP/HTTPS through the proxy (HTTP_PROXY=localhost:18080)
+;; Direct connections (curl --noproxy, nc, etc.) are blocked at kernel level.
+(deny network-outbound (remote ip "*:*"))
+(allow network-outbound (remote ip "localhost:*"))
+(allow network-outbound (remote tcp "localhost:*"))
+(allow network-outbound (remote unix-socket))
+(allow network-inbound)
+
+;; DNS resolution (needed for proxy to resolve hostnames)
+(allow network-outbound (remote udp "*:53"))
 
 ;; === Filesystem: deny sensitive paths ===
 (deny file-read* (subpath "/Users/tubone24/.ssh"))

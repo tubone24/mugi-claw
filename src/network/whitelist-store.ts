@@ -168,11 +168,18 @@ export class WhitelistStore {
 
   seedDefaults(): void {
     const db = getDb();
+    // Clean up duplicates caused by NULL port (SQLite treats each NULL as unique in UNIQUE constraint)
+    db.prepare(
+      `DELETE FROM network_whitelist WHERE id NOT IN (
+        SELECT MIN(id) FROM network_whitelist GROUP BY hostname, COALESCE(port, -1)
+      )`,
+    ).run();
     for (const hostname of this.defaultWhitelist) {
       db.prepare(
-        `INSERT OR IGNORE INTO network_whitelist (hostname, port, is_permanent, approved_by, purpose)
-         VALUES (?, NULL, 1, 'system', 'default whitelist')`,
-      ).run(hostname);
+        `INSERT INTO network_whitelist (hostname, port, is_permanent, approved_by, purpose)
+         SELECT ?, NULL, 1, 'system', 'default whitelist'
+         WHERE NOT EXISTS (SELECT 1 FROM network_whitelist WHERE hostname = ? AND port IS NULL)`,
+      ).run(hostname, hostname);
     }
     this.loadCache();
   }

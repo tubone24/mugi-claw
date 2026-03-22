@@ -225,9 +225,9 @@ describe('WhitelistStore', () => {
       store = new WhitelistStore(['a.com', 'b.com']);
       store.seedDefaults();
 
-      // run() called once per default hostname for INSERT + once for SELECT in loadCache
-      expect(mockRun).toHaveBeenCalledWith('a.com');
-      expect(mockRun).toHaveBeenCalledWith('b.com');
+      // run() called for: dedup DELETE, INSERT per hostname (with hostname twice), loadCache SELECT
+      expect(mockRun).toHaveBeenCalledWith('a.com', 'a.com');
+      expect(mockRun).toHaveBeenCalledWith('b.com', 'b.com');
     });
   });
 });

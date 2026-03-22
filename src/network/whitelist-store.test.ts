@@ -197,8 +197,8 @@ describe('WhitelistStore', () => {
 
       const entries = store.list();
 
-      // Should include: 1 DB row + 1 temporary + 1 default = 3
-      expect(entries).toHaveLength(3);
+      // list() returns DB rows + temporary entries (defaults are only used in isAllowed)
+      expect(entries).toHaveLength(2);
 
       const dbEntry = entries.find((e) => e.hostname === 'db-host.com');
       expect(dbEntry).toBeDefined();
@@ -208,11 +208,6 @@ describe('WhitelistStore', () => {
       const tempEntry = entries.find((e) => e.hostname === 'temp.com');
       expect(tempEntry).toBeDefined();
       expect(tempEntry!.isPermanent).toBe(false);
-
-      const defaultEntry = entries.find((e) => e.hostname === 'default.com');
-      expect(defaultEntry).toBeDefined();
-      expect(defaultEntry!.approvedBy).toBe('system');
-      expect(defaultEntry!.purpose).toBe('default whitelist');
     });
   });
 

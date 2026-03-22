@@ -22,6 +22,9 @@ export function registerHomeTabHandler(
   logger: Logger,
 ): void {
 
+  // Track whitelist page per user (in-memory, resets on restart)
+  const whitelistPageMap = new Map<string, number>();
+
   // Helper: publish home tab for a given user
   async function publishHomeTab(client: any, userId: string): Promise<void> {
     try {
@@ -40,6 +43,7 @@ export function registerHomeTabHandler(
         isOwner,
         whitelist: isOwner && whitelistStore ? whitelistStore.list() : undefined,
         logLevel: isOwner ? (settingsStore.get('log_level') ?? config.logLevel) : undefined,
+        whitelistPage: isOwner ? (whitelistPageMap.get(userId) ?? 0) : undefined,
       };
 
       const view = buildHomeTabView(data);
@@ -348,6 +352,16 @@ export function registerHomeTabHandler(
         }
         case 'delete': {
           whitelistStore?.removeById(entryId);
+          // Adjust page if current page becomes empty after deletion
+          const currentPage = whitelistPageMap.get(body.user.id) ?? 0;
+          if (currentPage > 0) {
+            const remaining = whitelistStore ? whitelistStore.list().filter(e => e.id != null).length : 0;
+            const { WHITELIST_PAGE_SIZE } = await import('../views/home-tab-view.js');
+            const maxPage = Math.max(0, Math.ceil(remaining / WHITELIST_PAGE_SIZE) - 1);
+            if (currentPage > maxPage) {
+              whitelistPageMap.set(body.user.id, maxPage);
+            }
+          }
           break;
         }
       }
@@ -355,6 +369,23 @@ export function registerHomeTabHandler(
       await publishHomeTab(client, body.user.id);
     } catch (err) {
       logger.error({ err }, 'Whitelist overflow action failed');
+    }
+  });
+
+  // Action: Whitelist pagination (prev/next)
+  app.action(/^home_wl_page_(prev|next)$/, async ({ ack, body, client }) => {
+    await ack();
+    if (body.user.id !== config.owner.slackUserId) return;
+
+    try {
+      const action = (body as any).actions?.[0];
+      const page = parseInt(action?.value ?? '0', 10);
+      if (!isNaN(page)) {
+        whitelistPageMap.set(body.user.id, page);
+      }
+      await publishHomeTab(client, body.user.id);
+    } catch (err) {
+      logger.error({ err }, 'Whitelist pagination failed');
     }
   });
 

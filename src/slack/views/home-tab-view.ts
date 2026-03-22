@@ -10,7 +10,10 @@ export interface HomeTabData {
   isOwner: boolean;
   whitelist?: WhitelistEntry[];
   logLevel?: string;
+  whitelistPage?: number;
 }
+
+export const WHITELIST_PAGE_SIZE = 15;
 
 export function buildHomeTabView(data: HomeTabData): View {
   const blocks: KnownBlock[] = [];
@@ -27,7 +30,7 @@ export function buildHomeTabView(data: HomeTabData): View {
 
   if (data.isOwner) {
     blocks.push({ type: 'divider' });
-    blocks.push(...buildAdminSection(data.whitelist ?? [], data.logLevel ?? 'info'));
+    blocks.push(...buildAdminSection(data.whitelist ?? [], data.logLevel ?? 'info', data.whitelistPage ?? 0));
   }
 
   // Block Kit 100 block limit safety
@@ -227,7 +230,7 @@ function buildSettingsSection(currentModel: ClaudeModel): KnownBlock[] {
   ];
 }
 
-function buildAdminSection(whitelist: WhitelistEntry[], logLevel: string): KnownBlock[] {
+function buildAdminSection(whitelist: WhitelistEntry[], logLevel: string, page: number): KnownBlock[] {
   const logOptions = [
     { text: { type: 'plain_text' as const, text: 'debug' }, value: 'debug' },
     { text: { type: 'plain_text' as const, text: 'info' }, value: 'info' },
@@ -236,6 +239,12 @@ function buildAdminSection(whitelist: WhitelistEntry[], logLevel: string): Known
   ];
 
   const initialLog = logOptions.find(o => o.value === logLevel) ?? logOptions[1]!;
+
+  const permanentEntries = whitelist.filter(e => e.id != null);
+  const totalPages = Math.max(1, Math.ceil(permanentEntries.length / WHITELIST_PAGE_SIZE));
+  const currentPage = Math.min(Math.max(0, page), totalPages - 1);
+  const start = currentPage * WHITELIST_PAGE_SIZE;
+  const displayEntries = permanentEntries.slice(start, start + WHITELIST_PAGE_SIZE);
 
   const blocks: KnownBlock[] = [
     {
@@ -256,7 +265,7 @@ function buildAdminSection(whitelist: WhitelistEntry[], logLevel: string): Known
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `*ネットワークホワイトリスト:* ${whitelist.length} 件`,
+        text: `*ネットワークホワイトリスト:* ${permanentEntries.length} 件`,
       },
       accessory: {
         type: 'button',
@@ -266,10 +275,6 @@ function buildAdminSection(whitelist: WhitelistEntry[], logLevel: string): Known
       },
     },
   ];
-
-  // Show permanent entries (those with DB IDs) with overflow menus
-  const permanentEntries = whitelist.filter(e => e.id != null);
-  const displayEntries = permanentEntries.slice(0, 15);
 
   if (displayEntries.length === 0) {
     blocks.push({
@@ -299,11 +304,39 @@ function buildAdminSection(whitelist: WhitelistEntry[], logLevel: string): Known
       });
     }
 
-    if (permanentEntries.length > 15) {
+    // Pagination controls
+    if (totalPages > 1) {
+      const paginationElements: any[] = [];
+
+      if (currentPage > 0) {
+        paginationElements.push({
+          type: 'button',
+          text: { type: 'plain_text', text: ':arrow_left: 前へ', emoji: true },
+          action_id: 'home_wl_page_prev',
+          value: String(currentPage - 1),
+        });
+      }
+
+      if (currentPage < totalPages - 1) {
+        paginationElements.push({
+          type: 'button',
+          text: { type: 'plain_text', text: '次へ :arrow_right:', emoji: true },
+          action_id: 'home_wl_page_next',
+          value: String(currentPage + 1),
+        });
+      }
+
       blocks.push({
         type: 'context',
-        elements: [{ type: 'mrkdwn', text: `_...他 ${permanentEntries.length - 15} 件のエントリがあるわん_` }],
+        elements: [{ type: 'mrkdwn', text: `_ページ ${currentPage + 1} / ${totalPages}_` }],
       });
+
+      if (paginationElements.length > 0) {
+        blocks.push({
+          type: 'actions',
+          elements: paginationElements,
+        } as KnownBlock);
+      }
     }
   }
 

@@ -58,7 +58,7 @@ export class TaskRunner {
       const model = task.model ?? this.settingsStore.getModel();
 
       return await new Promise((resolve) => {
-        const runner = this.claudeRunner.run(taskPrompt, undefined, model, undefined, { dangerouslySkipPermissions: true });
+        const runner = this.claudeRunner.run(taskPrompt, undefined, model, undefined, { allowAllTools: true });
 
         runner.on('result', (ev) => {
           this.taskStore.finishRun(runId, 'success', ev.result, undefined, ev.cost_usd, ev.duration_ms);

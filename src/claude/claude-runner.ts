@@ -3,6 +3,37 @@ import type { Logger } from 'pino';
 import type { AppConfig } from '../types.js';
 import { StreamParser } from './stream-parser.js';
 
+const DEFAULT_ALLOWED_TOOLS = [
+  'Read', 'Write', 'Edit', 'Bash(*)', 'Glob', 'Grep',
+  'WebSearch', 'WebFetch', 'NotebookEdit',
+  'mcp__browser__browser_navigate', 'mcp__browser__browser_click',
+  'mcp__browser__browser_type', 'mcp__browser__browser_screenshot',
+  'mcp__browser__browser_get_text', 'mcp__browser__browser_wait',
+  'mcp__browser__browser_evaluate',
+  'mcp__browser__browser_secure_input',
+  'mcp__desktop__desktop_screenshot', 'mcp__desktop__desktop_click',
+  'mcp__desktop__desktop_right_click', 'mcp__desktop__desktop_double_click',
+  'mcp__desktop__desktop_type', 'mcp__desktop__desktop_key',
+  'mcp__desktop__desktop_hotkey', 'mcp__desktop__desktop_mouse_move',
+  'mcp__desktop__desktop_scroll', 'mcp__desktop__desktop_get_screen_info',
+  'mcp__desktop__desktop_open_app', 'mcp__desktop__desktop_wait',
+  'TaskCreate', 'TaskUpdate', 'TaskGet', 'TaskList', 'TaskStop', 'TaskOutput',
+  'Skill', 'CronCreate', 'CronDelete', 'CronList',
+];
+
+const ALL_ALLOWED_TOOLS = [
+  ...DEFAULT_ALLOWED_TOOLS,
+  'Agent',
+  'ToolSearch',
+  'AskUserQuestion',
+  'EnterPlanMode', 'ExitPlanMode',
+  'EnterWorktree', 'ExitWorktree',
+];
+
+export interface ClaudeRunnerOptions {
+  allowAllTools?: boolean;
+}
+
 export class ClaudeRunner {
   private activeProcesses = 0;
   private queue: Array<() => void> = [];
@@ -13,7 +44,7 @@ export class ClaudeRunner {
   ) {}
 
   /** Claude CLI を実行し、StreamParser を返す */
-  run(prompt: string, resumeSessionId?: string, model?: string, approvalContext?: { channel: string; threadTs: string }, options?: { dangerouslySkipPermissions?: boolean }): StreamParser {
+  run(prompt: string, resumeSessionId?: string, model?: string, approvalContext?: { channel: string; threadTs: string }, options?: ClaudeRunnerOptions): StreamParser {
     const parser = new StreamParser();
 
     // 同時実行制御
@@ -33,7 +64,7 @@ export class ClaudeRunner {
     parser: StreamParser,
     model?: string,
     approvalContext?: { channel: string; threadTs: string },
-    options?: { dangerouslySkipPermissions?: boolean },
+    options?: ClaudeRunnerOptions,
   ): Promise<void> {
     this.activeProcesses++;
     const maxRetries = this.config.claude.maxRetries;
@@ -92,7 +123,7 @@ export class ClaudeRunner {
     parser: StreamParser,
     model?: string,
     approvalContext?: { channel: string; threadTs: string },
-    options?: { dangerouslySkipPermissions?: boolean },
+    options?: ClaudeRunnerOptions,
   ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const args = [
@@ -102,28 +133,8 @@ export class ClaudeRunner {
         '--verbose',
       ];
 
-      if (options?.dangerouslySkipPermissions) {
-        args.push('--dangerously-skip-permissions');
-      } else {
-        args.push(
-          '--allowedTools',
-          'Read', 'Write', 'Edit', 'Bash(*)', 'Glob', 'Grep',
-          'WebSearch', 'WebFetch', 'NotebookEdit',
-          'mcp__browser__browser_navigate', 'mcp__browser__browser_click',
-          'mcp__browser__browser_type', 'mcp__browser__browser_screenshot',
-          'mcp__browser__browser_get_text', 'mcp__browser__browser_wait',
-          'mcp__browser__browser_evaluate',
-          'mcp__browser__browser_secure_input',
-          'mcp__desktop__desktop_screenshot', 'mcp__desktop__desktop_click',
-          'mcp__desktop__desktop_right_click', 'mcp__desktop__desktop_double_click',
-          'mcp__desktop__desktop_type', 'mcp__desktop__desktop_key',
-          'mcp__desktop__desktop_hotkey', 'mcp__desktop__desktop_mouse_move',
-          'mcp__desktop__desktop_scroll', 'mcp__desktop__desktop_get_screen_info',
-          'mcp__desktop__desktop_open_app', 'mcp__desktop__desktop_wait',
-          'TaskCreate', 'TaskUpdate', 'TaskGet', 'TaskList', 'TaskStop', 'TaskOutput',
-          'Skill', 'CronCreate', 'CronDelete', 'CronList',
-        );
-      }
+      const tools = options?.allowAllTools ? ALL_ALLOWED_TOOLS : DEFAULT_ALLOWED_TOOLS;
+      args.push('--allowedTools', ...tools);
 
       args.push('--mcp-config', '.mcp.json');
 

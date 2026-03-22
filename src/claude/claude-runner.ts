@@ -13,15 +13,15 @@ export class ClaudeRunner {
   ) {}
 
   /** Claude CLI を実行し、StreamParser を返す */
-  run(prompt: string, resumeSessionId?: string, model?: string, approvalContext?: { channel: string; threadTs: string }): StreamParser {
+  run(prompt: string, resumeSessionId?: string, model?: string, approvalContext?: { channel: string; threadTs: string }, options?: { dangerouslySkipPermissions?: boolean }): StreamParser {
     const parser = new StreamParser();
 
     // 同時実行制御
     if (this.activeProcesses >= this.config.claude.maxConcurrent) {
       this.logger.info('同時実行数上限 - キューに追加');
-      this.queue.push(() => void this.executeWithRetry(prompt, resumeSessionId, parser, model, approvalContext));
+      this.queue.push(() => void this.executeWithRetry(prompt, resumeSessionId, parser, model, approvalContext, options));
     } else {
-      void this.executeWithRetry(prompt, resumeSessionId, parser, model, approvalContext);
+      void this.executeWithRetry(prompt, resumeSessionId, parser, model, approvalContext, options);
     }
 
     return parser;
@@ -33,13 +33,14 @@ export class ClaudeRunner {
     parser: StreamParser,
     model?: string,
     approvalContext?: { channel: string; threadTs: string },
+    options?: { dangerouslySkipPermissions?: boolean },
   ): Promise<void> {
     this.activeProcesses++;
     const maxRetries = this.config.claude.maxRetries;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        await this.execute(prompt, resumeSessionId, parser, model, approvalContext);
+        await this.execute(prompt, resumeSessionId, parser, model, approvalContext, options);
         this.onProcessEnd();
         return; // Success
       } catch (err) {
@@ -91,6 +92,7 @@ export class ClaudeRunner {
     parser: StreamParser,
     model?: string,
     approvalContext?: { channel: string; threadTs: string },
+    options?: { dangerouslySkipPermissions?: boolean },
   ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const args = [
@@ -98,24 +100,32 @@ export class ClaudeRunner {
         '--output-format', 'stream-json',
         '--max-turns', String(this.config.claude.maxTurns),
         '--verbose',
-        '--allowedTools',
-        'Read', 'Write', 'Edit', 'Bash(*)', 'Glob', 'Grep',
-        'WebSearch', 'WebFetch', 'NotebookEdit',
-        'mcp__browser__browser_navigate', 'mcp__browser__browser_click',
-        'mcp__browser__browser_type', 'mcp__browser__browser_screenshot',
-        'mcp__browser__browser_get_text', 'mcp__browser__browser_wait',
-        'mcp__browser__browser_evaluate',
-        'mcp__browser__browser_secure_input',
-        'mcp__desktop__desktop_screenshot', 'mcp__desktop__desktop_click',
-        'mcp__desktop__desktop_right_click', 'mcp__desktop__desktop_double_click',
-        'mcp__desktop__desktop_type', 'mcp__desktop__desktop_key',
-        'mcp__desktop__desktop_hotkey', 'mcp__desktop__desktop_mouse_move',
-        'mcp__desktop__desktop_scroll', 'mcp__desktop__desktop_get_screen_info',
-        'mcp__desktop__desktop_open_app', 'mcp__desktop__desktop_wait',
-        'TaskCreate', 'TaskUpdate', 'TaskGet', 'TaskList', 'TaskStop', 'TaskOutput',
-        'Skill', 'CronCreate', 'CronDelete', 'CronList',
-        '--mcp-config', '.mcp.json',
       ];
+
+      if (options?.dangerouslySkipPermissions) {
+        args.push('--dangerouslySkipPermissions');
+      } else {
+        args.push(
+          '--allowedTools',
+          'Read', 'Write', 'Edit', 'Bash(*)', 'Glob', 'Grep',
+          'WebSearch', 'WebFetch', 'NotebookEdit',
+          'mcp__browser__browser_navigate', 'mcp__browser__browser_click',
+          'mcp__browser__browser_type', 'mcp__browser__browser_screenshot',
+          'mcp__browser__browser_get_text', 'mcp__browser__browser_wait',
+          'mcp__browser__browser_evaluate',
+          'mcp__browser__browser_secure_input',
+          'mcp__desktop__desktop_screenshot', 'mcp__desktop__desktop_click',
+          'mcp__desktop__desktop_right_click', 'mcp__desktop__desktop_double_click',
+          'mcp__desktop__desktop_type', 'mcp__desktop__desktop_key',
+          'mcp__desktop__desktop_hotkey', 'mcp__desktop__desktop_mouse_move',
+          'mcp__desktop__desktop_scroll', 'mcp__desktop__desktop_get_screen_info',
+          'mcp__desktop__desktop_open_app', 'mcp__desktop__desktop_wait',
+          'TaskCreate', 'TaskUpdate', 'TaskGet', 'TaskList', 'TaskStop', 'TaskOutput',
+          'Skill', 'CronCreate', 'CronDelete', 'CronList',
+        );
+      }
+
+      args.push('--mcp-config', '.mcp.json');
 
       if (resumeSessionId) {
         args.push('--resume', resumeSessionId);

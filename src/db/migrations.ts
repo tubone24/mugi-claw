@@ -74,4 +74,16 @@ CREATE TABLE IF NOT EXISTS network_whitelist (
   expires_at TEXT,
   UNIQUE(hostname, port)
 );
+
+CREATE TABLE IF NOT EXISTS reaction_triggers (
+  id TEXT PRIMARY KEY,
+  emoji_name TEXT NOT NULL UNIQUE,
+  prompt_template TEXT NOT NULL,
+  description TEXT,
+  enabled INTEGER DEFAULT 1,
+  model TEXT,
+  created_by TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
 `;

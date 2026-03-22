@@ -142,6 +142,19 @@ export interface TaskRun {
   durationMs?: number;
 }
 
+// リアクショントリガー
+export interface ReactionTrigger {
+  id: string;
+  emojiName: string;        // "memo", "thinking_face" (コロンなし)
+  promptTemplate: string;
+  description?: string;
+  enabled: boolean;
+  model?: string;           // opus | sonnet | haiku
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Config
 export interface AppConfig {
   slack: {

@@ -9,6 +9,8 @@ import { SettingsStore } from './db/settings-store.js';
 import { ProfileStore } from './profile/profile-store.js';
 import { ProfileOnboarding } from './profile/profile-onboarding.js';
 import { TaskStore } from './scheduler/task-store.js';
+import { ReactionTriggerStore } from './reaction/reaction-trigger-store.js';
+import { registerReactionHandler } from './slack/handlers/reaction-handler.js';
 import { TaskRunner } from './scheduler/task-runner.js';
 import { Scheduler } from './scheduler/scheduler.js';
 import { Notifier } from './slack/notifier.js';
@@ -38,6 +40,7 @@ async function main() {
   const settingsStore = new SettingsStore();
   const profileStore = new ProfileStore();
   const taskStore = new TaskStore();
+  const reactionTriggerStore = new ReactionTriggerStore();
 
   // 3. Chrome CDP 起動（既に起動済みならスキップ）
   const chrome = new ChromeLauncher(config.browser.debuggingPort, config.browser.userDataDir, logger);
@@ -80,7 +83,8 @@ async function main() {
 
   // 7. ハンドラー登録
   registerMentionHandler(app, config, logger, profileStore, profileOnboarding, settingsStore, taskStore, scheduler);
-  registerCommandHandler(app, profileStore, taskStore, scheduler, settingsStore, logger);
+  registerCommandHandler(app, profileStore, taskStore, scheduler, reactionTriggerStore, settingsStore, logger);
+  registerReactionHandler(app, config, logger, reactionTriggerStore, settingsStore);
   registerHomeTabHandler(app, config, profileStore, taskStore, scheduler, settingsStore, whitelistStore, logger);
 
   // 8. Block Kit インタラクション（プロフィールオンボーディング）

@@ -8,12 +8,15 @@ import { handleProfileCommand } from './commands/profile-commands.js';
 import { handleScheduleCommand } from './commands/schedule-commands.js';
 import { handleMemoryCommand } from './commands/memory-commands.js';
 import { handleModelCommand } from './commands/model-commands.js';
+import { handleReactionCommand } from './commands/reaction-commands.js';
+import type { ReactionTriggerStore } from '../../reaction/reaction-trigger-store.js';
 
 export function registerCommandHandler(
   app: App,
   profileStore: ProfileStore,
   taskStore: TaskStore,
   scheduler: Scheduler,
+  reactionTriggerStore: ReactionTriggerStore,
   settingsStore: SettingsStore,
   logger: Logger,
 ): void {
@@ -62,6 +65,9 @@ export function registerCommandHandler(
         case 'model':
           await respond(handleModelCommand(subArgs, settingsStore));
           break;
+        case 'reaction':
+          await respond(handleReactionCommand(subArgs, command.user_id, reactionTriggerStore));
+          break;
         case 'help':
         default:
           await respond(getHelpText());
@@ -99,5 +105,12 @@ function getHelpText(): string {
 
 *モデル*
 \`/mugiclaw model\` - 現在のモデル表示
-\`/mugiclaw model <opus|sonnet|haiku>\` - モデル切替`;
+\`/mugiclaw model <opus|sonnet|haiku>\` - モデル切替
+
+*リアクショントリガー*
+\`/mugiclaw reaction list\` - トリガー一覧
+\`/mugiclaw reaction add :emoji: <プロンプト>\` - トリガー追加
+\`/mugiclaw reaction remove :emoji:\` - トリガー削除
+\`/mugiclaw reaction edit :emoji: <新プロンプト>\` - プロンプト編集
+\`/mugiclaw reaction toggle :emoji:\` - 有効/無効切替`;
 }

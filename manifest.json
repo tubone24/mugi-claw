@@ -18,7 +18,7 @@
       {
         "command": "/mugiclaw",
         "description": "むぎぼーを操作するコマンド",
-        "usage_hint": "[profile|schedule|run|memories|model|help]"
+        "usage_hint": "[profile|schedule|run|memories|model|reaction|help]"
       }
     ],
     "app_home": {
@@ -41,7 +41,8 @@
         "files:read",
         "im:write",
         "im:history",
-        "commands"
+        "commands",
+        "reactions:read"
       ],
       "user": [
         "search:read"
@@ -52,7 +53,8 @@
     "event_subscriptions": {
       "bot_events": [
         "app_mention",
-        "app_home_opened"
+        "app_home_opened",
+        "reaction_added"
       ]
     },
     "interactivity": {

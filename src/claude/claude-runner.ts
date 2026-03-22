@@ -103,7 +103,7 @@ export class ClaudeRunner {
       ];
 
       if (options?.dangerouslySkipPermissions) {
-        args.push('--dangerouslySkipPermissions');
+        args.push('--dangerously-skip-permissions');
       } else {
         args.push(
           '--allowedTools',

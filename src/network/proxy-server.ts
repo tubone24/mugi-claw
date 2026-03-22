@@ -15,6 +15,9 @@ export class ProxyServer {
   private sessionContext: SessionContext | null = null;
   private activeConnections = 0;
   private readonly MAX_CONNECTIONS = 50;
+  private onDeniedCallback?: (hostname: string, port: number) => void;
+  private deniedNotifyTimes = new Map<string, number>();
+  private readonly NOTIFY_COOLDOWN_MS = 60_000; // 1 minute cooldown per host
 
   constructor(
     private whitelistStore: WhitelistStore,
@@ -35,6 +38,10 @@ export class ProxyServer {
 
   clearSessionContext(): void {
     this.sessionContext = null;
+  }
+
+  setOnDenied(callback: (hostname: string, port: number) => void): void {
+    this.onDeniedCallback = callback;
   }
 
   async start(): Promise<void> {
@@ -77,6 +84,7 @@ export class ProxyServer {
 
     if (!allowed) {
       this.logger.warn({ hostname, port }, 'Network access denied');
+      this.notifyDenied(hostname, port);
       clientSocket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
       clientSocket.end();
       this.activeConnections--;
@@ -145,6 +153,7 @@ export class ProxyServer {
 
     if (!allowed) {
       this.logger.warn({ hostname, port }, 'Network access denied');
+      this.notifyDenied(hostname, port);
       res.writeHead(403);
       res.end('Forbidden: Network access not approved');
       this.activeConnections--;
@@ -184,6 +193,15 @@ export class ProxyServer {
     res.on('close', () => { this.activeConnections--; });
 
     req.pipe(proxyReq);
+  }
+
+  private notifyDenied(hostname: string, port: number): void {
+    const key = `${hostname}:${port}`;
+    const now = Date.now();
+    const last = this.deniedNotifyTimes.get(key);
+    if (last && now - last < this.NOTIFY_COOLDOWN_MS) return;
+    this.deniedNotifyTimes.set(key, now);
+    this.onDeniedCallback?.(hostname, port);
   }
 
   private async checkOrApprove(hostname: string, port: number): Promise<boolean> {

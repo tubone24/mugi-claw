@@ -9,6 +9,7 @@ import type { WhitelistStore } from '../../network/whitelist-store.js';
 import { buildHomeTabView } from '../views/home-tab-view.js';
 import { buildSettingsModal, SETTINGS_MODAL_CALLBACK_ID } from '../views/settings-modal.js';
 import { buildScheduleModal } from './commands/schedule-modal.js';
+import { buildWhitelistModal, WHITELIST_MODAL_CALLBACK_ID } from '../views/whitelist-modal.js';
 
 export function registerHomeTabHandler(
   app: App,
@@ -307,51 +308,99 @@ export function registerHomeTabHandler(
     }
   });
 
-  // Action: Manage whitelist (admin only)
-  app.action('home_manage_whitelist', async ({ ack, body, client }) => {
+  // Action: Add whitelist entry (admin only)
+  app.action('home_whitelist_add', async ({ ack, body, client }) => {
+    await ack();
+    if (body.user.id !== config.owner.slackUserId) return;
+    try {
+      await client.views.open({
+        trigger_id: (body as any).trigger_id,
+        view: buildWhitelistModal(),
+      });
+    } catch (err) {
+      logger.error({ err }, 'Whitelist add modal open failed');
+    }
+  });
+
+  // Action: Whitelist overflow (edit/delete) (admin only)
+  app.action(/^home_wl_overflow_/, async ({ ack, body, client }) => {
     await ack();
     if (body.user.id !== config.owner.slackUserId) return;
 
     try {
-      const entries = whitelistStore?.list() ?? [];
-      const displayEntries = entries.slice(0, 20);
-      const entryLines = displayEntries.map(e => {
-        const port = e.port ? `:${e.port}` : '';
-        const perm = e.isPermanent ? '(permanent)' : '(temp)';
-        return `• \`${e.hostname}${port}\` ${perm}`;
-      });
-      if (entries.length > 20) {
-        entryLines.push(`_...他 ${entries.length - 20} 件_`);
+      const action = (body as any).actions?.[0];
+      const selectedValue = action?.selected_option?.value as string | undefined;
+      if (!selectedValue) return;
+
+      const [operation, ...idParts] = selectedValue.split('_');
+      const entryId = parseInt(idParts.join('_'), 10);
+      if (isNaN(entryId)) return;
+
+      switch (operation) {
+        case 'edit': {
+          const entry = whitelistStore?.getById(entryId);
+          if (!entry) return;
+          await client.views.open({
+            trigger_id: (body as any).trigger_id,
+            view: buildWhitelistModal(entry),
+          });
+          return; // Don't republish - modal handles it
+        }
+        case 'delete': {
+          whitelistStore?.removeById(entryId);
+          break;
+        }
       }
 
-      await client.views.open({
-        trigger_id: (body as any).trigger_id,
-        view: {
-          type: 'modal' as const,
-          title: { type: 'plain_text' as const, text: 'ホワイトリスト管理' },
-          close: { type: 'plain_text' as const, text: '閉じる' },
-          blocks: [
-            {
-              type: 'section',
-              text: {
-                type: 'mrkdwn',
-                text: entries.length > 0
-                  ? `*登録済みホスト (${entries.length}件):*\n${entryLines.join('\n')}`
-                  : '_ホワイトリストは空わん_',
-              },
-            },
-            {
-              type: 'context',
-              elements: [
-                { type: 'mrkdwn', text: 'ホワイトリストの追加・削除は `/mugiclaw` コマンドまたはメンションで行えるわん' },
-              ],
-            },
-          ],
-        },
-      });
+      await publishHomeTab(client, body.user.id);
     } catch (err) {
-      logger.error({ err }, 'Whitelist modal open failed');
+      logger.error({ err }, 'Whitelist overflow action failed');
     }
+  });
+
+  // View submission: Whitelist add/edit modal
+  app.view(WHITELIST_MODAL_CALLBACK_ID, async ({ ack, body, view, client }) => {
+    const state = view.state.values;
+    const hostname = state['wl_hostname']?.['hostname']?.value?.trim();
+
+    if (!hostname) {
+      await ack({
+        response_action: 'errors',
+        errors: { wl_hostname: 'ホスト名を入力してわん' },
+      });
+      return;
+    }
+
+    const portStr = state['wl_port']?.['port']?.value?.trim();
+    const port = portStr ? parseInt(portStr, 10) : undefined;
+    if (portStr && (isNaN(port!) || port! < 1 || port! > 65535)) {
+      await ack({
+        response_action: 'errors',
+        errors: { wl_port: 'ポート番号は1〜65535の数値を入力してわん' },
+      });
+      return;
+    }
+
+    const purpose = state['wl_purpose']?.['purpose']?.value?.trim() || undefined;
+
+    await ack();
+
+    let metadata: { entryId?: number } = {};
+    if (view.private_metadata) {
+      try {
+        metadata = JSON.parse(view.private_metadata);
+      } catch {
+        // ignore
+      }
+    }
+
+    if (metadata.entryId != null) {
+      whitelistStore?.updateEntry(metadata.entryId, hostname, port, purpose);
+    } else {
+      whitelistStore?.addPermanent(hostname, body.user.id, port, purpose);
+    }
+
+    await publishHomeTab(client, body.user.id);
   });
 
   logger.info('Home tab handler registered');

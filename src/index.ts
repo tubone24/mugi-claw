@@ -71,6 +71,21 @@ async function main() {
     proxyServer = new ProxyServer(whitelistStore, networkApproval, config.network.proxyPort, logger);
     await proxyServer.start();
     logger.info({ port: config.network.proxyPort }, 'Network proxy started');
+
+    proxyServer.setOnDenied(async (hostname, port) => {
+      try {
+        const target = port === 443 ? hostname : `${hostname}:${port}`;
+        const dm = await app.client.conversations.open({ users: config.owner.slackUserId });
+        if (dm.channel?.id) {
+          await app.client.chat.postMessage({
+            channel: dm.channel.id,
+            text: `:no_entry: ネットワークアクセスがブロックされたわん\nHost: \`${target}\`\nホワイトリストに追加するには Home タブから設定してわん`,
+          });
+        }
+      } catch (err) {
+        logger.error({ err, hostname, port }, 'Failed to send denied notification DM');
+      }
+    });
   }
 
   // 5. Notifier, TaskRunner, Scheduler作成

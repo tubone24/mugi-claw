@@ -120,6 +120,52 @@ export class WhitelistStore {
     return entries;
   }
 
+  getById(id: number): WhitelistEntry | null {
+    const db = getDb();
+    const row = db.prepare(`SELECT * FROM network_whitelist WHERE id = ?`).get(id) as {
+      id: number;
+      hostname: string;
+      port: number | null;
+      is_permanent: number;
+      approved_by: string | null;
+      purpose: string | null;
+      created_at: string;
+      expires_at: string | null;
+    } | undefined;
+    if (!row) return null;
+    return {
+      id: row.id,
+      hostname: row.hostname,
+      port: row.port ?? undefined,
+      isPermanent: row.is_permanent === 1,
+      approvedBy: row.approved_by ?? undefined,
+      purpose: row.purpose ?? undefined,
+      createdAt: row.created_at,
+      expiresAt: row.expires_at ?? undefined,
+    };
+  }
+
+  removeById(id: number): boolean {
+    const db = getDb();
+    const row = db.prepare(`SELECT hostname, port FROM network_whitelist WHERE id = ?`).get(id) as { hostname: string; port: number | null } | undefined;
+    if (!row) return false;
+    this.permanentCache.delete(this.makeKey(row.hostname, row.port ?? undefined));
+    db.prepare(`DELETE FROM network_whitelist WHERE id = ?`).run(id);
+    return true;
+  }
+
+  updateEntry(id: number, hostname: string, port?: number, purpose?: string): void {
+    const db = getDb();
+    const oldRow = db.prepare(`SELECT hostname, port FROM network_whitelist WHERE id = ?`).get(id) as { hostname: string; port: number | null } | undefined;
+    if (oldRow) {
+      this.permanentCache.delete(this.makeKey(oldRow.hostname, oldRow.port ?? undefined));
+    }
+    db.prepare(
+      `UPDATE network_whitelist SET hostname = ?, port = ?, purpose = ? WHERE id = ?`,
+    ).run(hostname, port ?? null, purpose ?? null, id);
+    this.permanentCache.add(this.makeKey(hostname, port));
+  }
+
   seedDefaults(): void {
     const db = getDb();
     for (const hostname of this.defaultWhitelist) {

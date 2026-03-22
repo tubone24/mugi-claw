@@ -260,11 +260,52 @@ function buildAdminSection(whitelist: WhitelistEntry[], logLevel: string): Known
       },
       accessory: {
         type: 'button',
-        text: { type: 'plain_text', text: '管理', emoji: true },
-        action_id: 'home_manage_whitelist',
+        text: { type: 'plain_text', text: '+ 追加', emoji: true },
+        style: 'primary',
+        action_id: 'home_whitelist_add',
       },
     },
   ];
+
+  // Show permanent entries (those with DB IDs) with overflow menus
+  const permanentEntries = whitelist.filter(e => e.id != null);
+  const displayEntries = permanentEntries.slice(0, 15);
+
+  if (displayEntries.length === 0) {
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: '_ホワイトリストは空わん_' },
+    });
+  } else {
+    for (const entry of displayEntries) {
+      const port = entry.port != null ? `:${entry.port}` : '';
+      const purpose = entry.purpose ? ` - ${entry.purpose}` : '';
+      const perm = entry.isPermanent ? '永続' : '一時';
+
+      blocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `:globe_with_meridians: \`${entry.hostname}${port}\` (${perm})${purpose}`,
+        },
+        accessory: {
+          type: 'overflow',
+          action_id: `home_wl_overflow_${entry.id}`,
+          options: [
+            { text: { type: 'plain_text', text: '編集' }, value: `edit_${entry.id}` },
+            { text: { type: 'plain_text', text: '削除' }, value: `delete_${entry.id}` },
+          ],
+        },
+      });
+    }
+
+    if (permanentEntries.length > 15) {
+      blocks.push({
+        type: 'context',
+        elements: [{ type: 'mrkdwn', text: `_...他 ${permanentEntries.length - 15} 件のエントリがあるわん_` }],
+      });
+    }
+  }
 
   return blocks;
 }

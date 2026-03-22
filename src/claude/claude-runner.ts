@@ -23,6 +23,8 @@ const DEFAULT_ALLOWED_TOOLS = [
 
 const ALL_ALLOWED_TOOLS = [
   ...DEFAULT_ALLOWED_TOOLS,
+  'Skill(gmail)', 'Skill(slack)', 'Skill(google-calendar)',
+  'Skill(google-maps-timeline)', 'Skill(spotify)',
   'Agent',
   'ToolSearch',
   'AskUserQuestion',

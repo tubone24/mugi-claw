@@ -56,14 +56,12 @@ export function registerReactionHandler(
 ): void {
   const claudeRunner = new ClaudeRunner(config, logger);
 
-  app.event('reaction_added', async ({ event, client }) => {
+  app.event('reaction_added', async ({ event, client, context }) => {
     try {
       // 1. ボット自身のリアクション無視
-      if (event.user === config.owner.slackUserId) {
+      if (context.botUserId && event.user === context.botUserId) {
         return;
       }
-
-      // Bot自身のリアクションも無視（auth.testでbotUserIdを取得するのは高コストなのでowner比較のみ）
 
       // 2. トリガー検索
       const trigger = reactionTriggerStore.getByEmoji(event.reaction);

@@ -58,17 +58,54 @@ async function handleCreate(
 
     const doc = buildCanvasDocument(title, messages, channelName);
 
-    // Create canvas using apiCall (bookmarks/canvases may not have typed methods)
-    const result = await client.apiCall('canvases.create', {
-      title,
-      document_content: doc,
-    });
+    // チャンネルCanvasとして作成を試みる（チャンネルメンバーに自動的に見える）
+    let canvasId: string | undefined;
+    let usedChannelCanvas = false;
 
-    if (result.ok && (result as any).canvas_id) {
-      return `Canvas「${title}」を作成したわん！ :page_facing_up:\nCanvas ID: \`${(result as any).canvas_id}\``;
+    try {
+      const channelResult = await client.apiCall('conversations.canvases.create', {
+        channel_id: channelId,
+        document_content: doc,
+      });
+      if (channelResult.ok && (channelResult as any).canvas_id) {
+        canvasId = (channelResult as any).canvas_id;
+        usedChannelCanvas = true;
+      }
+    } catch {
+      // チャンネルCanvasが既に存在する場合など、フォールバック
     }
 
-    return `Canvas の作成に失敗したわん... (${(result as any).error ?? 'unknown error'})`;
+    // チャンネルCanvas作成失敗時はスタンドアロンCanvasを作成
+    if (!canvasId) {
+      const result = await client.apiCall('canvases.create', {
+        title,
+        document_content: doc,
+      });
+
+      if (result.ok && (result as any).canvas_id) {
+        canvasId = (result as any).canvas_id;
+
+        // アクセス権をチャンネルメンバーに付与
+        try {
+          await client.apiCall('canvases.access.set', {
+            canvas_id: canvasId,
+            channel_ids: [channelId],
+            access_level: 'write',
+          });
+        } catch {
+          // アクセス権設定失敗は無視（Canvasは作成済み）
+        }
+      }
+    }
+
+    if (canvasId) {
+      const note = usedChannelCanvas
+        ? 'チャンネルのCanvasタブから確認できるわん'
+        : 'Canvasアプリから確認できるわん';
+      return `Canvas「${title}」を作成したわん！ :page_facing_up:\n${note}`;
+    }
+
+    return 'Canvas の作成に失敗したわん...';
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (message.includes('missing_scope')) {

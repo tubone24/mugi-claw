@@ -192,14 +192,47 @@ export function registerMentionHandler(
           try {
             if (canvasAction.action === 'create') {
               const doc = buildSummaryCanvasDocument(canvasAction.title, canvasAction.content);
-              const canvasResult = await client.apiCall('canvases.create', {
-                title: canvasAction.title,
-                document_content: doc,
-              });
-              if (canvasResult.ok) {
-                logger.info({ title: canvasAction.title, canvasId: (canvasResult as any).canvas_id }, 'Canvas作成');
+              const targetChannel = canvasAction.channel || event.channel;
+              let canvasId: string | undefined;
+
+              // チャンネルCanvasとして作成を試みる（チャンネルメンバーに自動的に見える）
+              try {
+                const channelResult = await client.apiCall('conversations.canvases.create', {
+                  channel_id: targetChannel,
+                  document_content: doc,
+                });
+                if (channelResult.ok && (channelResult as any).canvas_id) {
+                  canvasId = (channelResult as any).canvas_id;
+                }
+              } catch {
+                // フォールバック
+              }
+
+              // チャンネルCanvas作成失敗時はスタンドアロンCanvasを作成
+              if (!canvasId) {
+                const standaloneResult = await client.apiCall('canvases.create', {
+                  title: canvasAction.title,
+                  document_content: doc,
+                });
+                if (standaloneResult.ok && (standaloneResult as any).canvas_id) {
+                  canvasId = (standaloneResult as any).canvas_id;
+                  // アクセス権をチャンネルメンバーに付与
+                  try {
+                    await client.apiCall('canvases.access.set', {
+                      canvas_id: canvasId,
+                      channel_ids: [targetChannel],
+                      access_level: 'write',
+                    });
+                  } catch {
+                    // アクセス権設定失敗は無視
+                  }
+                }
+              }
+
+              if (canvasId) {
+                logger.info({ title: canvasAction.title, canvasId }, 'Canvas作成');
               } else {
-                logger.warn({ error: (canvasResult as any).error }, 'Canvas作成失敗');
+                logger.warn({ title: canvasAction.title }, 'Canvas作成失敗');
               }
             }
           } catch (err) {

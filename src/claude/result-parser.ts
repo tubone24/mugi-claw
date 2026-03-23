@@ -33,13 +33,29 @@ export interface ParsedResult {
     url?: string;
   }>;
   listActions: Array<{
-    action: 'create_list' | 'add_item' | 'complete_item' | 'remove_item';
+    action: 'create_list' | 'add_item' | 'complete_item' | 'remove_item' | 'undone_item' | 'delete_list';
     listName: string;
     title?: string;
     description?: string;
     assignee?: string;
     dueDate?: string;
     priority?: 'high' | 'medium' | 'low';
+  }>;
+  modelActions: Array<{
+    action: 'show' | 'set';
+    model?: 'opus' | 'sonnet' | 'haiku';
+  }>;
+  reactionActions: Array<{
+    action: 'list' | 'add' | 'remove' | 'edit' | 'toggle';
+    emoji?: string;
+    promptTemplate?: string;
+    description?: string;
+    model?: string;
+  }>;
+  scheduledMessageActions: Array<{
+    action: 'list' | 'cancel';
+    channel?: string;
+    messageId?: string;
   }>;
 }
 
@@ -75,6 +91,9 @@ export function parseClaudeResult(text: string): ParsedResult {
   const scheduledMessages: ParsedResult['scheduledMessages'] = [];
   const bookmarkActions: ParsedResult['bookmarkActions'] = [];
   const listActions: ParsedResult['listActions'] = [];
+  const modelActions: ParsedResult['modelActions'] = [];
+  const reactionActions: ParsedResult['reactionActions'] = [];
+  const scheduledMessageActions: ParsedResult['scheduledMessageActions'] = [];
 
   // Parse MEMORY_SAVE blocks
   const memoryRegex = /\[MEMORY_SAVE\]\s*\n([\s\S]*?)\[\/MEMORY_SAVE\]/g;
@@ -184,7 +203,7 @@ export function parseClaudeResult(text: string): ParsedResult {
   const listRegex = /\[LIST_ACTION\]\s*\n([\s\S]*?)\[\/LIST_ACTION\]/g;
   while ((match = listRegex.exec(text)) !== null) {
     const block = match[1] ?? '';
-    const action = extractField(block, 'action') as 'create_list' | 'add_item' | 'complete_item' | 'remove_item' | undefined;
+    const action = extractField(block, 'action') as 'create_list' | 'add_item' | 'complete_item' | 'remove_item' | 'undone_item' | 'delete_list' | undefined;
     const listName = extractField(block, 'list_name');
     if (action && listName) {
       listActions.push({
@@ -200,10 +219,56 @@ export function parseClaudeResult(text: string): ParsedResult {
     cleanText = cleanText.replace(match[0], '');
   }
 
+  // Parse MODEL_ACTION blocks
+  const modelRegex = /\[MODEL_ACTION\]\s*\n([\s\S]*?)\[\/MODEL_ACTION\]/g;
+  while ((match = modelRegex.exec(text)) !== null) {
+    const block = match[1] ?? '';
+    const action = extractField(block, 'action') as 'show' | 'set' | undefined;
+    if (action) {
+      modelActions.push({
+        action,
+        model: extractField(block, 'model') as 'opus' | 'sonnet' | 'haiku' | undefined,
+      });
+    }
+    cleanText = cleanText.replace(match[0], '');
+  }
+
+  // Parse REACTION_ACTION blocks
+  const reactionRegex = /\[REACTION_ACTION\]\s*\n([\s\S]*?)\[\/REACTION_ACTION\]/g;
+  while ((match = reactionRegex.exec(text)) !== null) {
+    const block = match[1] ?? '';
+    const action = extractField(block, 'action') as 'list' | 'add' | 'remove' | 'edit' | 'toggle' | undefined;
+    if (action) {
+      reactionActions.push({
+        action,
+        emoji: extractField(block, 'emoji'),
+        promptTemplate: extractField(block, 'prompt_template'),
+        description: extractField(block, 'description'),
+        model: extractField(block, 'model'),
+      });
+    }
+    cleanText = cleanText.replace(match[0], '');
+  }
+
+  // Parse SCHEDULED_MESSAGE_ACTION blocks
+  const smActionRegex = /\[SCHEDULED_MESSAGE_ACTION\]\s*\n([\s\S]*?)\[\/SCHEDULED_MESSAGE_ACTION\]/g;
+  while ((match = smActionRegex.exec(text)) !== null) {
+    const block = match[1] ?? '';
+    const action = extractField(block, 'action') as 'list' | 'cancel' | undefined;
+    if (action) {
+      scheduledMessageActions.push({
+        action,
+        channel: extractField(block, 'channel'),
+        messageId: extractField(block, 'message_id'),
+      });
+    }
+    cleanText = cleanText.replace(match[0], '');
+  }
+
   // Clean up extra whitespace
   cleanText = cleanText.replace(/\n{3,}/g, '\n\n').trim();
 
-  return { cleanText, newMemories, profileUpdates, scheduleActions, canvasActions, scheduledMessages, bookmarkActions, listActions };
+  return { cleanText, newMemories, profileUpdates, scheduleActions, canvasActions, scheduledMessages, bookmarkActions, listActions, modelActions, reactionActions, scheduledMessageActions };
 }
 
 function extractField(block: string, fieldName: string): string | undefined {

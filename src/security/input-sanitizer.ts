@@ -56,7 +56,7 @@ const DETECTION_RULES: DetectionRule[] = [
   //    Attacker could manipulate memory, profile, or schedule actions.
   {
     label: 'structured-output-injection',
-    pattern: /\[MEMORY_SAVE\]|\[PROFILE_UPDATE\]|\[SCHEDULE_ACTION\]/i,
+    pattern: /\[MEMORY_SAVE\]|\[PROFILE_UPDATE\]|\[SCHEDULE_ACTION\]|\[MODEL_ACTION\]|\[REACTION_ACTION\]|\[SCHEDULED_MESSAGE_ACTION\]/i,
   },
 ];
 

@@ -100,7 +100,7 @@ async function main() {
   const profileOnboarding = new ProfileOnboarding(app.client, profileStore, logger);
 
   // 7. ハンドラー登録
-  registerMentionHandler(app, config, logger, profileStore, profileOnboarding, settingsStore, taskStore, scheduler, listStore);
+  registerMentionHandler(app, config, logger, profileStore, profileOnboarding, settingsStore, taskStore, scheduler, listStore, reactionTriggerStore);
   registerCommandHandler(app, profileStore, taskStore, scheduler, reactionTriggerStore, settingsStore, listStore, logger);
   registerReactionHandler(app, config, logger, reactionTriggerStore, settingsStore);
   registerHomeTabHandler(app, config, profileStore, taskStore, scheduler, settingsStore, whitelistStore, listStore, logger);

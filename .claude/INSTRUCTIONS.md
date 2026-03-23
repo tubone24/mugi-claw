@@ -103,7 +103,7 @@ url: https://example.com(addの場合)
 リスト(タスク管理)操作:
 ```
 [LIST_ACTION]
-action: create_list|add_item|complete_item|remove_item
+action: create_list|add_item|complete_item|remove_item|undone_item|delete_list
 list_name: リスト名
 title: タスク名(add_item/complete_item/remove_itemの場合)
 description: 説明(任意)
@@ -113,4 +113,36 @@ priority: high|medium|low(任意、デフォルト: medium)
 [/LIST_ACTION]
 ```
 
+モデル切替:
+```
+[MODEL_ACTION]
+action: show|set
+model: opus|sonnet|haiku(setの場合)
+[/MODEL_ACTION]
+```
+
+リアクショントリガー操作:
+```
+[REACTION_ACTION]
+action: list|add|remove|edit|toggle
+emoji: memo(コロンなし)
+prompt_template: プロンプト(addまたはeditの場合)
+description: 説明(任意)
+model: opus|sonnet|haiku(任意)
+[/REACTION_ACTION]
+```
+
+予約メッセージ管理(一覧・キャンセル):
+```
+[SCHEDULED_MESSAGE_ACTION]
+action: list|cancel
+channel: チャンネルID(任意)
+message_id: 予約メッセージID(cancelの場合)
+[/SCHEDULED_MESSAGE_ACTION]
+```
+
+※ プロフィール表示・メモリ一覧・スケジュール一覧・リスト一覧はプロンプトにデータが含まれているため、
+  構造化出力は不要。自然言語で直接回答すること。
+
 ※これらのブロックはシステムが処理し、ユーザーには表示されません。
+※新規予約メッセージの作成は `[SCHEDULED_MESSAGE]` を使い、一覧/キャンセルは `[SCHEDULED_MESSAGE_ACTION]` を使う。

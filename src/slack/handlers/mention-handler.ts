@@ -15,6 +15,7 @@ import type { SettingsStore } from '../../db/settings-store.js';
 import type { TaskStore } from '../../scheduler/task-store.js';
 import type { Scheduler } from '../../scheduler/scheduler.js';
 import type { ListStore } from '../list-store.js';
+import type { ReactionTriggerStore } from '../../reaction/reaction-trigger-store.js';
 import { buildSummaryCanvasDocument } from '../canvas-builder.js';
 
 const sessionManager = new SessionManager();
@@ -29,6 +30,7 @@ export function registerMentionHandler(
   taskStore: TaskStore,
   scheduler: Scheduler,
   listStore: ListStore,
+  reactionTriggerStore: ReactionTriggerStore,
 ): void {
   const claudeRunner = new ClaudeRunner(config, logger);
 
@@ -294,6 +296,18 @@ export function registerMentionHandler(
                   }
                 }
                 break;
+              case 'list': {
+                const listResult = await client.apiCall('bookmarks.list', { channel_id: bmAction.channel });
+                const bookmarks = ((listResult as any).bookmarks ?? []) as Array<{ id: string; title: string; link: string }>;
+                if (bookmarks.length > 0) {
+                  const bmList = bookmarks.map(bm => `- ${bm.title}: ${bm.link}`).join('\n');
+                  parsed.cleanText += `\n\n📌 ブックマーク一覧:\n${bmList}`;
+                } else {
+                  parsed.cleanText += '\n\nブックマークはまだ登録されていないわん。';
+                }
+                logger.info({ channel: bmAction.channel }, 'ブックマーク一覧取得');
+                break;
+              }
             }
           } catch (err) {
             logger.warn({ err, bmAction }, 'ブックマーク操作失敗');
@@ -349,6 +363,25 @@ export function registerMentionHandler(
                 }
                 break;
               }
+              case 'undone_item': {
+                const list = listStore.getListByName(listAction.listName, userId);
+                if (list && listAction.title) {
+                  const item = listStore.getItemByTitle(list.id, listAction.title);
+                  if (item) {
+                    listStore.updateItem(item.id, { status: 'open' });
+                    logger.info({ listName: listAction.listName, title: listAction.title }, 'リストアイテム未完了に戻す');
+                  }
+                }
+                break;
+              }
+              case 'delete_list': {
+                const list = listStore.getListByName(listAction.listName, userId);
+                if (list) {
+                  listStore.deleteList(list.id);
+                  logger.info({ listName: listAction.listName }, 'リスト削除');
+                }
+                break;
+              }
             }
           } catch (err) {
             logger.warn({ err, listAction }, 'リスト操作失敗');
@@ -401,6 +434,135 @@ export function registerMentionHandler(
             }
           } catch (err) {
             logger.warn({ err, action }, 'スケジュール操作失敗');
+          }
+        }
+
+        // モデル操作
+        for (const modelAction of parsed.modelActions) {
+          try {
+            switch (modelAction.action) {
+              case 'show': {
+                const currentModel = settingsStore.getModel();
+                parsed.cleanText += `\n\n現在のモデル: ${currentModel}`;
+                logger.info({ model: currentModel }, 'モデル表示');
+                break;
+              }
+              case 'set': {
+                if (modelAction.model) {
+                  settingsStore.setModel(modelAction.model);
+                  parsed.cleanText += `\n\nモデルを ${modelAction.model} に変更したわん！`;
+                  logger.info({ model: modelAction.model }, 'モデル変更');
+                }
+                break;
+              }
+            }
+          } catch (err) {
+            logger.warn({ err, modelAction }, 'モデル操作失敗');
+          }
+        }
+
+        // リアクショントリガー操作
+        for (const reactionAction of parsed.reactionActions) {
+          try {
+            switch (reactionAction.action) {
+              case 'list': {
+                const triggers = reactionTriggerStore.getAll();
+                if (triggers.length > 0) {
+                  const triggerList = triggers.map(t => {
+                    const status = t.enabled ? '✅' : '⏸️';
+                    return `- ${status} :${t.emojiName}: → ${t.description ?? t.promptTemplate}`;
+                  }).join('\n');
+                  parsed.cleanText += `\n\nリアクショントリガー一覧:\n${triggerList}`;
+                } else {
+                  parsed.cleanText += '\n\nリアクショントリガーはまだ登録されていないわん。';
+                }
+                logger.info('リアクショントリガー一覧取得');
+                break;
+              }
+              case 'add': {
+                if (reactionAction.emoji && reactionAction.promptTemplate) {
+                  reactionTriggerStore.create({
+                    emojiName: reactionAction.emoji,
+                    promptTemplate: reactionAction.promptTemplate,
+                    description: reactionAction.description,
+                    model: reactionAction.model,
+                    createdBy: userId,
+                  });
+                  logger.info({ emoji: reactionAction.emoji }, 'リアクショントリガー追加');
+                }
+                break;
+              }
+              case 'remove': {
+                if (reactionAction.emoji) {
+                  reactionTriggerStore.deleteByEmoji(reactionAction.emoji);
+                  logger.info({ emoji: reactionAction.emoji }, 'リアクショントリガー削除');
+                }
+                break;
+              }
+              case 'edit': {
+                if (reactionAction.emoji) {
+                  const trigger = reactionTriggerStore.getByEmoji(reactionAction.emoji);
+                  if (trigger) {
+                    const updateData: Partial<{ promptTemplate: string; description: string; model: string }> = {};
+                    if (reactionAction.promptTemplate) updateData.promptTemplate = reactionAction.promptTemplate;
+                    if (reactionAction.description) updateData.description = reactionAction.description;
+                    if (reactionAction.model) updateData.model = reactionAction.model;
+                    reactionTriggerStore.update(trigger.id, updateData);
+                    logger.info({ emoji: reactionAction.emoji }, 'リアクショントリガー編集');
+                  }
+                }
+                break;
+              }
+              case 'toggle': {
+                if (reactionAction.emoji) {
+                  const trigger = reactionTriggerStore.getByEmoji(reactionAction.emoji);
+                  if (trigger) {
+                    reactionTriggerStore.toggle(trigger.id);
+                    logger.info({ emoji: reactionAction.emoji }, 'リアクショントリガートグル');
+                  }
+                }
+                break;
+              }
+            }
+          } catch (err) {
+            logger.warn({ err, reactionAction }, 'リアクショントリガー操作失敗');
+          }
+        }
+
+        // 予約メッセージ管理操作
+        for (const smAction of parsed.scheduledMessageActions) {
+          try {
+            switch (smAction.action) {
+              case 'list': {
+                const result = await client.chat.scheduledMessages.list({
+                  channel: smAction.channel,
+                });
+                const msgs = result.scheduled_messages ?? [];
+                if (msgs.length > 0) {
+                  const msgList = msgs.map(m => {
+                    const date = new Date((m.post_at ?? 0) * 1000).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+                    return `- ${date}: ${m.text} (ID: ${m.id})`;
+                  }).join('\n');
+                  parsed.cleanText += `\n\n予約メッセージ一覧:\n${msgList}`;
+                } else {
+                  parsed.cleanText += '\n\n予約メッセージはないわん。';
+                }
+                logger.info('予約メッセージ一覧取得');
+                break;
+              }
+              case 'cancel': {
+                if (smAction.channel && smAction.messageId) {
+                  await client.chat.deleteScheduledMessage({
+                    channel: smAction.channel,
+                    scheduled_message_id: smAction.messageId,
+                  });
+                  logger.info({ messageId: smAction.messageId }, '予約メッセージキャンセル');
+                }
+                break;
+              }
+            }
+          } catch (err) {
+            logger.warn({ err, smAction }, '予約メッセージ管理操作失敗');
           }
         }
 

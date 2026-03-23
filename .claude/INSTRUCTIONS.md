@@ -69,4 +69,46 @@ mentionChannel: true|false(任意)
 [/SCHEDULE_ACTION]
 ```
 
+Canvasの作成:
+```
+[CANVAS_ACTION]
+action: create
+title: Canvasのタイトル
+content: Canvasに書く内容(Markdown形式)
+channel: チャンネルID(任意)
+[/CANVAS_ACTION]
+```
+
+予約メッセージの作成:
+```
+[SCHEDULED_MESSAGE]
+channel: チャンネルID
+post_at: 2026-03-24T09:00:00+09:00
+text: メッセージ本文
+[/SCHEDULED_MESSAGE]
+```
+
+ブックマーク操作:
+```
+[BOOKMARK_ACTION]
+action: add|remove|list
+channel: チャンネルID
+title: ブックマークタイトル
+url: https://example.com(addの場合)
+[/BOOKMARK_ACTION]
+```
+
+リスト(タスク管理)操作:
+```
+[LIST_ACTION]
+action: create_list|add_item|complete_item|remove_item
+list_name: リスト名
+title: タスク名(add_item/complete_item/remove_itemの場合)
+description: 説明(任意)
+assignee: ユーザーID(任意)
+due_date: YYYY-MM-DD(任意)
+priority: high|medium|low(任意、デフォルト: medium)
+[/LIST_ACTION]
+```
+
 ※これらのブロックはシステムが処理し、ユーザーには表示されません。

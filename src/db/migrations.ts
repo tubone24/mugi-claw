@@ -86,4 +86,28 @@ CREATE TABLE IF NOT EXISTS reaction_triggers (
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS user_lists (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  channel_id TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(name, created_by)
+);
+
+CREATE TABLE IF NOT EXISTS list_items (
+  id TEXT PRIMARY KEY,
+  list_id TEXT NOT NULL REFERENCES user_lists(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT,
+  status TEXT DEFAULT 'open',
+  assignee TEXT,
+  due_date TEXT,
+  priority TEXT DEFAULT 'medium',
+  created_by TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
 `;

@@ -14,6 +14,8 @@ import type { ProfileOnboarding } from '../../profile/profile-onboarding.js';
 import type { SettingsStore } from '../../db/settings-store.js';
 import type { TaskStore } from '../../scheduler/task-store.js';
 import type { Scheduler } from '../../scheduler/scheduler.js';
+import type { ListStore } from '../list-store.js';
+import { buildSummaryCanvasDocument } from '../canvas-builder.js';
 
 const sessionManager = new SessionManager();
 
@@ -26,6 +28,7 @@ export function registerMentionHandler(
   settingsStore: SettingsStore,
   taskStore: TaskStore,
   scheduler: Scheduler,
+  listStore: ListStore,
 ): void {
   const claudeRunner = new ClaudeRunner(config, logger);
 
@@ -60,8 +63,14 @@ export function registerMentionHandler(
       const memories = profileStore.getMemories(userId, 30);
       const tasks = taskStore.getAllTasks();
 
+      // 3.5. リスト情報読み込み
+      const userLists = listStore.getListsByUser(userId).map(list => ({
+        list,
+        items: listStore.getItems(list.id),
+      }));
+
       // 4. プロンプト構築
-      let prompt = buildPrompt(context, profile, memories, tasks);
+      let prompt = buildPrompt(context, profile, memories, tasks, userLists);
 
       // 4.5. 添付ファイル受信
       const files = (event as unknown as Record<string, unknown>)['files'] as Array<{
@@ -175,6 +184,141 @@ export function registerMentionHandler(
             logger.info({ userId, updates: Object.keys(updates) }, 'プロフィール更新');
           } catch (err) {
             logger.warn({ err }, 'プロフィール更新失敗');
+          }
+        }
+
+        // Canvas操作
+        for (const canvasAction of parsed.canvasActions) {
+          try {
+            if (canvasAction.action === 'create') {
+              const doc = buildSummaryCanvasDocument(canvasAction.title, canvasAction.content);
+              const canvasResult = await client.apiCall('canvases.create', {
+                title: canvasAction.title,
+                document_content: doc,
+              });
+              if (canvasResult.ok) {
+                logger.info({ title: canvasAction.title, canvasId: (canvasResult as any).canvas_id }, 'Canvas作成');
+              } else {
+                logger.warn({ error: (canvasResult as any).error }, 'Canvas作成失敗');
+              }
+            }
+          } catch (err) {
+            logger.warn({ err, canvasAction }, 'Canvas操作失敗');
+          }
+        }
+
+        // 予約メッセージ操作
+        for (const sm of parsed.scheduledMessages) {
+          try {
+            // ISO 8601 → Unix timestamp
+            let postAt: number;
+            if (/^\d+$/.test(sm.postAt)) {
+              postAt = parseInt(sm.postAt, 10);
+            } else {
+              postAt = Math.floor(new Date(sm.postAt).getTime() / 1000);
+            }
+            if (isNaN(postAt) || postAt <= Math.floor(Date.now() / 1000)) {
+              logger.warn({ postAt: sm.postAt }, '予約メッセージの日時が無効または過去');
+              continue;
+            }
+            await client.chat.scheduleMessage({
+              channel: sm.channel,
+              text: sm.text,
+              post_at: postAt,
+            });
+            logger.info({ channel: sm.channel, postAt }, '予約メッセージ作成');
+          } catch (err) {
+            logger.warn({ err, sm }, '予約メッセージ操作失敗');
+          }
+        }
+
+        // ブックマーク操作
+        for (const bmAction of parsed.bookmarkActions) {
+          try {
+            switch (bmAction.action) {
+              case 'add':
+                if (bmAction.title && bmAction.url) {
+                  await client.apiCall('bookmarks.add', {
+                    channel_id: bmAction.channel,
+                    title: bmAction.title,
+                    type: 'link',
+                    link: bmAction.url,
+                  });
+                  logger.info({ title: bmAction.title, channel: bmAction.channel }, 'ブックマーク追加');
+                }
+                break;
+              case 'remove':
+                if (bmAction.title) {
+                  const listResult = await client.apiCall('bookmarks.list', { channel_id: bmAction.channel });
+                  const bookmarks = ((listResult as any).bookmarks ?? []) as Array<{ id: string; title: string }>;
+                  const target = bookmarks.find(bm => bm.title === bmAction.title);
+                  if (target) {
+                    await client.apiCall('bookmarks.remove', {
+                      channel_id: bmAction.channel,
+                      bookmark_id: target.id,
+                    });
+                    logger.info({ title: bmAction.title }, 'ブックマーク削除');
+                  }
+                }
+                break;
+            }
+          } catch (err) {
+            logger.warn({ err, bmAction }, 'ブックマーク操作失敗');
+          }
+        }
+
+        // リスト操作
+        for (const listAction of parsed.listActions) {
+          try {
+            switch (listAction.action) {
+              case 'create_list': {
+                if (!listStore.getListByName(listAction.listName, userId)) {
+                  listStore.createList({ name: listAction.listName, createdBy: userId });
+                  logger.info({ listName: listAction.listName }, 'リスト作成');
+                }
+                break;
+              }
+              case 'add_item': {
+                const list = listStore.getListByName(listAction.listName, userId);
+                if (list && listAction.title) {
+                  listStore.createItem({
+                    listId: list.id,
+                    title: listAction.title,
+                    description: listAction.description,
+                    assignee: listAction.assignee,
+                    dueDate: listAction.dueDate,
+                    priority: listAction.priority,
+                    createdBy: userId,
+                  });
+                  logger.info({ listName: listAction.listName, title: listAction.title }, 'リストアイテム追加');
+                }
+                break;
+              }
+              case 'complete_item': {
+                const list = listStore.getListByName(listAction.listName, userId);
+                if (list && listAction.title) {
+                  const item = listStore.getItemByTitle(list.id, listAction.title);
+                  if (item) {
+                    listStore.updateItem(item.id, { status: 'done' });
+                    logger.info({ listName: listAction.listName, title: listAction.title }, 'リストアイテム完了');
+                  }
+                }
+                break;
+              }
+              case 'remove_item': {
+                const list = listStore.getListByName(listAction.listName, userId);
+                if (list && listAction.title) {
+                  const item = listStore.getItemByTitle(list.id, listAction.title);
+                  if (item) {
+                    listStore.deleteItem(item.id);
+                    logger.info({ listName: listAction.listName, title: listAction.title }, 'リストアイテム削除');
+                  }
+                }
+                break;
+              }
+            }
+          } catch (err) {
+            logger.warn({ err, listAction }, 'リスト操作失敗');
           }
         }
 

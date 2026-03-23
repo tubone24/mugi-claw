@@ -1,5 +1,5 @@
 import type { KnownBlock, View } from '@slack/types';
-import type { ScheduledTask, TaskRun, UserProfile, WhitelistEntry } from '../../types.js';
+import type { ScheduledTask, TaskRun, UserProfile, WhitelistEntry, UserList, ListItem } from '../../types.js';
 import type { ClaudeModel } from '../../db/settings-store.js';
 
 export interface HomeTabData {
@@ -11,6 +11,7 @@ export interface HomeTabData {
   whitelist?: WhitelistEntry[];
   logLevel?: string;
   whitelistPage?: number;
+  userLists?: { list: UserList; items: ListItem[] }[];
 }
 
 export const WHITELIST_PAGE_SIZE = 15;
@@ -25,6 +26,8 @@ export function buildHomeTabView(data: HomeTabData): View {
   blocks.push(...buildScheduleSection(data.tasks));
   blocks.push({ type: 'divider' });
   blocks.push(...buildRecentRunsSection(data.recentRuns));
+  blocks.push({ type: 'divider' });
+  blocks.push(...buildListSection(data.userLists ?? []));
   blocks.push({ type: 'divider' });
   blocks.push(...buildSettingsSection(data.currentModel));
 
@@ -189,6 +192,51 @@ function buildRecentRunsSection(runs: (TaskRun & { taskName: string })[]): Known
     type: 'section',
     text: { type: 'mrkdwn', text: lines.join('\n') },
   });
+
+  return blocks;
+}
+
+function buildListSection(userLists: { list: UserList; items: ListItem[] }[]): KnownBlock[] {
+  const blocks: KnownBlock[] = [
+    {
+      type: 'section',
+      text: { type: 'mrkdwn', text: '*:clipboard: リスト*' },
+    },
+  ];
+
+  if (userLists.length === 0) {
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: '_リストはまだないわん。`/mugiclaw list create <名前>` で作成してわん_' },
+    });
+    return blocks;
+  }
+
+  // Show max 5 lists
+  const displayLists = userLists.slice(0, 5);
+  for (const { list, items } of displayLists) {
+    const openCount = items.filter(i => i.status === 'open').length;
+    const doneCount = items.filter(i => i.status === 'done').length;
+    const openItems = items.filter(i => i.status === 'open').slice(0, 3);
+    const itemPreview = openItems.length > 0
+      ? '\n' + openItems.map(i => `    :white_large_square: ${i.title}`).join('\n')
+      : '';
+
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `:clipboard: *${list.name}* — ${openCount}件未完了 / ${doneCount}件完了${itemPreview}`,
+      },
+    });
+  }
+
+  if (userLists.length > 5) {
+    blocks.push({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: `_...他 ${userLists.length - 5} 件のリストがあるわん_` }],
+    });
+  }
 
   return blocks;
 }

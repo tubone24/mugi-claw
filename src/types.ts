@@ -155,6 +155,30 @@ export interface ReactionTrigger {
   updatedAt: string;
 }
 
+// リスト（タスク管理）
+export interface UserList {
+  id: string;
+  name: string;
+  channelId?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ListItem {
+  id: string;
+  listId: string;
+  title: string;
+  description?: string;
+  status: 'open' | 'done';
+  assignee?: string;
+  dueDate?: string;
+  priority: 'high' | 'medium' | 'low';
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Config
 export interface AppConfig {
   slack: {

@@ -9,7 +9,12 @@ import { handleScheduleCommand } from './commands/schedule-commands.js';
 import { handleMemoryCommand } from './commands/memory-commands.js';
 import { handleModelCommand } from './commands/model-commands.js';
 import { handleReactionCommand } from './commands/reaction-commands.js';
+import { handleCanvasCommand } from './commands/canvas-commands.js';
+import { handleScheduledMessageCommand } from './commands/scheduled-message-commands.js';
+import { handleBookmarkCommand } from './commands/bookmark-commands.js';
+import { handleListCommand } from './commands/list-commands.js';
 import type { ReactionTriggerStore } from '../../reaction/reaction-trigger-store.js';
+import type { ListStore } from '../list-store.js';
 
 export function registerCommandHandler(
   app: App,
@@ -18,6 +23,7 @@ export function registerCommandHandler(
   scheduler: Scheduler,
   reactionTriggerStore: ReactionTriggerStore,
   settingsStore: SettingsStore,
+  listStore: ListStore,
   logger: Logger,
 ): void {
   app.command('/mugiclaw', async ({ command, ack, respond, client }) => {
@@ -68,6 +74,37 @@ export function registerCommandHandler(
         case 'reaction':
           await respond(handleReactionCommand(subArgs, command.user_id, reactionTriggerStore));
           break;
+        case 'canvas': {
+          const result = await handleCanvasCommand(subArgs, client, command.channel_id, command.user_id);
+          if (result) {
+            await respond(result);
+          }
+          break;
+        }
+        case 'msg':
+        case 'message': {
+          const result = await handleScheduledMessageCommand(subArgs, client, {
+            triggerId: command.trigger_id,
+            userId: command.user_id,
+            channelId: command.channel_id,
+          });
+          if (result) {
+            await respond(result);
+          }
+          break;
+        }
+        case 'bookmark':
+        case 'bm': {
+          const result = await handleBookmarkCommand(subArgs, client, command.channel_id);
+          if (result) {
+            await respond(result);
+          }
+          break;
+        }
+        case 'list': {
+          await respond(handleListCommand(subArgs, command.user_id, listStore));
+          break;
+        }
         case 'help':
         default:
           await respond(getHelpText());
@@ -112,5 +149,25 @@ function getHelpText(): string {
 \`/mugiclaw reaction add :emoji: <プロンプト>\` - トリガー追加
 \`/mugiclaw reaction remove :emoji:\` - トリガー削除
 \`/mugiclaw reaction edit :emoji: <新プロンプト>\` - プロンプト編集
-\`/mugiclaw reaction toggle :emoji:\` - 有効/無効切替`;
+\`/mugiclaw reaction toggle :emoji:\` - 有効/無効切替
+
+*Canvas*
+\`/mugiclaw canvas create <タイトル>\` - チャンネルの会話をCanvasにまとめる
+
+*予約メッセージ*
+\`/mugiclaw msg list\` - 予約メッセージ一覧
+\`/mugiclaw msg add\` - モーダルで予約作成
+\`/mugiclaw msg cancel <ID>\` - 予約キャンセル
+
+*ブックマーク*
+\`/mugiclaw bookmark list\` - ブックマーク一覧
+\`/mugiclaw bookmark add <タイトル> <URL>\` - ブックマーク追加
+\`/mugiclaw bookmark remove <タイトル>\` - ブックマーク削除
+
+*リスト（タスク管理）*
+\`/mugiclaw list create <名前>\` - リスト作成
+\`/mugiclaw list list\` - リスト一覧
+\`/mugiclaw list show <名前>\` - タスク表示
+\`/mugiclaw list add <リスト名> <タスク名>\` - タスク追加
+\`/mugiclaw list done <リスト名> <タスク名>\` - タスク完了`;
 }

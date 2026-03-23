@@ -11,6 +11,8 @@ import { ProfileOnboarding } from './profile/profile-onboarding.js';
 import { TaskStore } from './scheduler/task-store.js';
 import { ReactionTriggerStore } from './reaction/reaction-trigger-store.js';
 import { registerReactionHandler } from './slack/handlers/reaction-handler.js';
+import { ListStore } from './slack/list-store.js';
+import { SCHEDULED_MESSAGE_MODAL_CALLBACK_ID, parseScheduledMessageModalValues } from './slack/handlers/commands/scheduled-message-modal.js';
 import { TaskRunner } from './scheduler/task-runner.js';
 import { Scheduler } from './scheduler/scheduler.js';
 import { Notifier } from './slack/notifier.js';
@@ -41,6 +43,7 @@ async function main() {
   const profileStore = new ProfileStore();
   const taskStore = new TaskStore();
   const reactionTriggerStore = new ReactionTriggerStore();
+  const listStore = new ListStore();
 
   // 3. Chrome CDP 起動（既に起動済みならスキップ）
   const chrome = new ChromeLauncher(config.browser.debuggingPort, config.browser.userDataDir, logger);
@@ -97,10 +100,10 @@ async function main() {
   const profileOnboarding = new ProfileOnboarding(app.client, profileStore, logger);
 
   // 7. ハンドラー登録
-  registerMentionHandler(app, config, logger, profileStore, profileOnboarding, settingsStore, taskStore, scheduler);
-  registerCommandHandler(app, profileStore, taskStore, scheduler, reactionTriggerStore, settingsStore, logger);
+  registerMentionHandler(app, config, logger, profileStore, profileOnboarding, settingsStore, taskStore, scheduler, listStore);
+  registerCommandHandler(app, profileStore, taskStore, scheduler, reactionTriggerStore, settingsStore, listStore, logger);
   registerReactionHandler(app, config, logger, reactionTriggerStore, settingsStore);
-  registerHomeTabHandler(app, config, profileStore, taskStore, scheduler, settingsStore, whitelistStore, logger);
+  registerHomeTabHandler(app, config, profileStore, taskStore, scheduler, settingsStore, whitelistStore, listStore, logger);
 
   // 8. Block Kit インタラクション（プロフィールオンボーディング）
   app.action('profile_submit', async ({ ack, body, client }) => {
@@ -292,6 +295,57 @@ async function main() {
           errors: {
             task_name: 'エラーが発生したわん。もう一度試してわん',
           },
+        });
+      } catch {
+        // ack already called — ignore
+      }
+    }
+  });
+
+  // 8.6. 予約メッセージモーダルsubmitハンドラ
+  app.view(SCHEDULED_MESSAGE_MODAL_CALLBACK_ID, async ({ ack, body, view, client }) => {
+    try {
+      const result = parseScheduledMessageModalValues(view.state.values);
+
+      if ('error' in result) {
+        await ack({
+          response_action: 'errors',
+          errors: { [result.field]: result.error },
+        });
+        return;
+      }
+
+      await ack();
+
+      await client.chat.scheduleMessage({
+        channel: result.channel,
+        text: result.text,
+        post_at: result.postAt,
+      });
+
+      // Send confirmation DM
+      try {
+        const dm = await client.conversations.open({ users: body.user.id });
+        if (dm.channel?.id) {
+          const scheduledDate = new Date(result.postAt * 1000).toLocaleString('ja-JP', {
+            year: 'numeric', month: 'short', day: 'numeric',
+            hour: '2-digit', minute: '2-digit',
+            timeZone: 'Asia/Tokyo',
+          });
+          await client.chat.postMessage({
+            channel: dm.channel.id,
+            text: `メッセージを予約したわん！ :clock3:\n日時: ${scheduledDate}\nチャンネル: <#${result.channel}>`,
+          });
+        }
+      } catch (err) {
+        logger.error({ err }, '予約メッセージ確認DM送信失敗');
+      }
+    } catch (err) {
+      logger.error({ err }, '予約メッセージモーダル処理エラー');
+      try {
+        await ack({
+          response_action: 'errors',
+          errors: { sm_text: 'エラーが発生したわん。もう一度試してわん' },
         });
       } catch {
         // ack already called — ignore

@@ -15,6 +15,32 @@ export interface ParsedResult {
     mentionHere?: boolean;
     mentionChannel?: boolean;
   }>;
+  canvasActions: Array<{
+    action: 'create';
+    title: string;
+    content: string;
+    channel?: string;
+  }>;
+  scheduledMessages: Array<{
+    channel: string;
+    postAt: string;
+    text: string;
+  }>;
+  bookmarkActions: Array<{
+    action: 'add' | 'remove' | 'list';
+    channel: string;
+    title?: string;
+    url?: string;
+  }>;
+  listActions: Array<{
+    action: 'create_list' | 'add_item' | 'complete_item' | 'remove_item';
+    listName: string;
+    title?: string;
+    description?: string;
+    assignee?: string;
+    dueDate?: string;
+    priority?: 'high' | 'medium' | 'low';
+  }>;
 }
 
 /**
@@ -45,6 +71,10 @@ export function parseClaudeResult(text: string): ParsedResult {
   const newMemories: ParsedResult['newMemories'] = [];
   const profileUpdates: ParsedResult['profileUpdates'] = {};
   const scheduleActions: ParsedResult['scheduleActions'] = [];
+  const canvasActions: ParsedResult['canvasActions'] = [];
+  const scheduledMessages: ParsedResult['scheduledMessages'] = [];
+  const bookmarkActions: ParsedResult['bookmarkActions'] = [];
+  const listActions: ParsedResult['listActions'] = [];
 
   // Parse MEMORY_SAVE blocks
   const memoryRegex = /\[MEMORY_SAVE\]\s*\n([\s\S]*?)\[\/MEMORY_SAVE\]/g;
@@ -102,14 +132,88 @@ export function parseClaudeResult(text: string): ParsedResult {
     cleanText = cleanText.replace(match[0], '');
   }
 
+  // Parse CANVAS_ACTION blocks
+  const canvasRegex = /\[CANVAS_ACTION\]\s*\n([\s\S]*?)\[\/CANVAS_ACTION\]/g;
+  while ((match = canvasRegex.exec(text)) !== null) {
+    const block = match[1] ?? '';
+    const action = extractField(block, 'action') as 'create' | undefined;
+    const title = extractField(block, 'title');
+    const content = extractField(block, 'content') ?? extractMultilineField(block, 'content');
+    if (action && title && content) {
+      canvasActions.push({
+        action,
+        title,
+        content,
+        channel: extractField(block, 'channel'),
+      });
+    }
+    cleanText = cleanText.replace(match[0], '');
+  }
+
+  // Parse SCHEDULED_MESSAGE blocks
+  const smRegex = /\[SCHEDULED_MESSAGE\]\s*\n([\s\S]*?)\[\/SCHEDULED_MESSAGE\]/g;
+  while ((match = smRegex.exec(text)) !== null) {
+    const block = match[1] ?? '';
+    const channel = extractField(block, 'channel');
+    const postAt = extractField(block, 'post_at');
+    const msgText = extractField(block, 'text');
+    if (channel && postAt && msgText) {
+      scheduledMessages.push({ channel, postAt, text: msgText });
+    }
+    cleanText = cleanText.replace(match[0], '');
+  }
+
+  // Parse BOOKMARK_ACTION blocks
+  const bmRegex = /\[BOOKMARK_ACTION\]\s*\n([\s\S]*?)\[\/BOOKMARK_ACTION\]/g;
+  while ((match = bmRegex.exec(text)) !== null) {
+    const block = match[1] ?? '';
+    const action = extractField(block, 'action') as 'add' | 'remove' | 'list' | undefined;
+    const channel = extractField(block, 'channel');
+    if (action && channel) {
+      bookmarkActions.push({
+        action,
+        channel,
+        title: extractField(block, 'title'),
+        url: extractField(block, 'url'),
+      });
+    }
+    cleanText = cleanText.replace(match[0], '');
+  }
+
+  // Parse LIST_ACTION blocks
+  const listRegex = /\[LIST_ACTION\]\s*\n([\s\S]*?)\[\/LIST_ACTION\]/g;
+  while ((match = listRegex.exec(text)) !== null) {
+    const block = match[1] ?? '';
+    const action = extractField(block, 'action') as 'create_list' | 'add_item' | 'complete_item' | 'remove_item' | undefined;
+    const listName = extractField(block, 'list_name');
+    if (action && listName) {
+      listActions.push({
+        action,
+        listName,
+        title: extractField(block, 'title'),
+        description: extractField(block, 'description'),
+        assignee: extractField(block, 'assignee'),
+        dueDate: extractField(block, 'due_date'),
+        priority: extractField(block, 'priority') as 'high' | 'medium' | 'low' | undefined,
+      });
+    }
+    cleanText = cleanText.replace(match[0], '');
+  }
+
   // Clean up extra whitespace
   cleanText = cleanText.replace(/\n{3,}/g, '\n\n').trim();
 
-  return { cleanText, newMemories, profileUpdates, scheduleActions };
+  return { cleanText, newMemories, profileUpdates, scheduleActions, canvasActions, scheduledMessages, bookmarkActions, listActions };
 }
 
 function extractField(block: string, fieldName: string): string | undefined {
   const regex = new RegExp(`^${fieldName}:\\s*(.+)$`, 'mi');
+  const match = regex.exec(block);
+  return match?.[1]?.trim() || undefined;
+}
+
+function extractMultilineField(block: string, fieldName: string): string | undefined {
+  const regex = new RegExp(`^${fieldName}:\\s*(.+(?:\\n(?!\\w+:).+)*)`, 'mi');
   const match = regex.exec(block);
   return match?.[1]?.trim() || undefined;
 }

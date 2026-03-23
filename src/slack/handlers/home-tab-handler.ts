@@ -6,6 +6,7 @@ import type { TaskStore } from '../../scheduler/task-store.js';
 import type { Scheduler } from '../../scheduler/scheduler.js';
 import type { SettingsStore, ClaudeModel } from '../../db/settings-store.js';
 import type { WhitelistStore } from '../../network/whitelist-store.js';
+import type { ListStore } from '../list-store.js';
 import { buildHomeTabView } from '../views/home-tab-view.js';
 import { buildSettingsModal, SETTINGS_MODAL_CALLBACK_ID } from '../views/settings-modal.js';
 import { buildScheduleModal } from './commands/schedule-modal.js';
@@ -19,6 +20,7 @@ export function registerHomeTabHandler(
   scheduler: Scheduler,
   settingsStore: SettingsStore,
   whitelistStore: WhitelistStore | null,
+  listStore: ListStore,
   logger: Logger,
 ): void {
 
@@ -35,6 +37,11 @@ export function registerHomeTabHandler(
       const recentRuns = taskStore.getRecentRunsByUser(userId, 5);
       const currentModel = settingsStore.getModel();
 
+      const userLists = listStore.getListsByUser(userId).map(list => ({
+        list,
+        items: listStore.getItems(list.id),
+      }));
+
       const data: import('../views/home-tab-view.js').HomeTabData = {
         profile,
         tasks,
@@ -44,6 +51,7 @@ export function registerHomeTabHandler(
         whitelist: isOwner && whitelistStore ? whitelistStore.list() : undefined,
         logLevel: isOwner ? (settingsStore.get('log_level') ?? config.logLevel) : undefined,
         whitelistPage: isOwner ? (whitelistPageMap.get(userId) ?? 0) : undefined,
+        userLists,
       };
 
       const view = buildHomeTabView(data);

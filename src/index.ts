@@ -101,7 +101,7 @@ async function main() {
 
   // 7. ハンドラー登録
   registerMentionHandler(app, config, logger, profileStore, profileOnboarding, settingsStore, taskStore, scheduler, listStore, reactionTriggerStore);
-  registerCommandHandler(app, profileStore, taskStore, scheduler, reactionTriggerStore, settingsStore, listStore, logger);
+  registerCommandHandler(app, profileStore, taskStore, scheduler, reactionTriggerStore, settingsStore, listStore, logger, config.owner.slackUserId);
   registerReactionHandler(app, config, logger, reactionTriggerStore, settingsStore);
   registerHomeTabHandler(app, config, profileStore, taskStore, scheduler, settingsStore, whitelistStore, listStore, logger);
 
@@ -356,6 +356,28 @@ async function main() {
   // 9. App起動
   await app.start();
   logger.info('mugi-claw 起動完了わん！ 🐕');
+
+  // 9.5. 起動通知をオーナーに送信
+  try {
+    const dm = await app.client.conversations.open({ users: config.owner.slackUserId });
+    if (dm.channel?.id) {
+      let commitInfo = '';
+      try {
+        const { execSync } = await import('node:child_process');
+        const hash = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
+        const msg = execSync('git log -1 --format=%s', { encoding: 'utf-8' }).trim();
+        commitInfo = `\nCommit: \`${hash}\` ${msg}`;
+      } catch {
+        // git情報取得失敗は無視
+      }
+      await app.client.chat.postMessage({
+        channel: dm.channel.id,
+        text: `:dog: むぎぼーが起動したわん！${commitInfo}`,
+      });
+    }
+  } catch (err) {
+    logger.warn({ err }, '起動通知の送信に失敗');
+  }
 
   // 10. スケジューラ復元
   scheduler.initialize();

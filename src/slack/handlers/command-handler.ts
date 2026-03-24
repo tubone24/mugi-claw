@@ -13,6 +13,7 @@ import { handleCanvasCommand } from './commands/canvas-commands.js';
 import { handleScheduledMessageCommand } from './commands/scheduled-message-commands.js';
 import { handleBookmarkCommand } from './commands/bookmark-commands.js';
 import { handleListCommand } from './commands/list-commands.js';
+import { handleDeployCommand } from './commands/deploy-commands.js';
 import type { ReactionTriggerStore } from '../../reaction/reaction-trigger-store.js';
 import type { ListStore } from '../list-store.js';
 
@@ -25,6 +26,7 @@ export function registerCommandHandler(
   settingsStore: SettingsStore,
   listStore: ListStore,
   logger: Logger,
+  ownerSlackUserId: string,
 ): void {
   app.command('/mugiclaw', async ({ command, ack, respond, client }) => {
     await ack();
@@ -105,6 +107,10 @@ export function registerCommandHandler(
           await respond(handleListCommand(subArgs, command.user_id, listStore));
           break;
         }
+        case 'deploy': {
+          await respond(handleDeployCommand(command.user_id, ownerSlackUserId, client, logger));
+          break;
+        }
         case 'help':
         default:
           await respond(getHelpText());
@@ -169,5 +175,8 @@ function getHelpText(): string {
 \`/mugiclaw list list\` - リスト一覧
 \`/mugiclaw list show <名前>\` - タスク表示
 \`/mugiclaw list add <リスト名> <タスク名>\` - タスク追加
-\`/mugiclaw list done <リスト名> <タスク名>\` - タスク完了`;
+\`/mugiclaw list done <リスト名> <タスク名>\` - タスク完了
+
+*デプロイ（オーナー専用）*
+\`/mugiclaw deploy\` - git pull → ビルド → 再起動`;
 }

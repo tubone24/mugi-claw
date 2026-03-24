@@ -18,7 +18,7 @@
       {
         "command": "/mugiclaw",
         "description": "むぎぼーを操作するコマンド",
-        "usage_hint": "[profile|schedule|run|memories|model|reaction|canvas|msg|bookmark|list|help]"
+        "usage_hint": "[profile|schedule|run|memories|model|reaction|canvas|msg|bookmark|list|deploy|help]"
       }
     ],
     "app_home": {

@@ -36,6 +36,34 @@
 - `desktop_get_screen_info`: 画面情報取得
 - `desktop_wait`: 待機
 
+### モバイル操作（mcp__mobile__）— iOS Simulator
+#### デバイス管理
+- `mobile_list_available_devices`: 接続済みのシミュレータ・デバイス一覧
+- `mobile_get_screen_size`: 画面サイズ取得
+- `mobile_get_orientation`: 画面向き取得
+- `mobile_set_orientation`: 画面向き変更（portrait/landscape）
+
+#### アプリ管理
+- `mobile_list_apps`: インストール済みアプリ一覧
+- `mobile_launch_app`: アプリ起動（バンドルID指定）
+- `mobile_terminate_app`: アプリ終了
+- `mobile_install_app`: アプリインストール（.app/.ipa/.zip）
+- `mobile_uninstall_app`: アプリ削除
+
+#### 画面操作
+- `mobile_take_screenshot`: スクリーンショット撮影
+- `mobile_save_screenshot`: スクリーンショットをファイル保存
+- `mobile_list_elements_on_screen`: UI要素一覧（座標・属性付き）
+- `mobile_click_on_screen_at_coordinates`: 座標タップ
+- `mobile_double_tap_on_screen`: ダブルタップ
+- `mobile_long_press_on_screen_at_coordinates`: 長押し
+- `mobile_swipe_on_screen`: スワイプ（上下左右）
+
+#### 入力・ナビゲーション
+- `mobile_type_keys`: テキスト入力（送信オプション付き）
+- `mobile_press_button`: ハードウェアボタン（HOME, BACK, VOLUME等）
+- `mobile_open_url`: URL をデバイスブラウザで開く
+
 ### タスク管理（Claude Code 組み込み）
 - `TaskCreate`: タスクの作成
 - `TaskUpdate`: タスクの更新
@@ -48,6 +76,8 @@
 - 上記MCPツールおよびタスク管理・Cron管理ツールはすべて利用許可済み。許可を求めたり確認せず、直接呼び出す
 - ブラウザ操作には必ずMCPブラウザツールを使用する（Bash経由のCDP操作は禁止）
 - デスクトップ操作には必ずMCPデスクトップツールを使用する
+- iOS Simulator操作には必ずMCPモバイルツール（mcp__mobile__）を使用する
+- モバイルのスクリーンショットはLLMコンテキストに入るが、Slackへの自動アップロードは未対応（Phase 2で対応予定）
 - スクリーンショットはSlackに自動アップロードされるため、手動アップロード不要
 - **パスワード・OTP等の機密情報の入力には必ず `browser_secure_input` を使う。`browser_type` でパスワードを直接入力してはならない**
 

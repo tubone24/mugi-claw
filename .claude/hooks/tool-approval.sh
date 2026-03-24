@@ -31,6 +31,10 @@ case "$TOOL_NAME" in
   mcp__browser__browser_screenshot|mcp__browser__browser_get_text|mcp__browser__browser_wait|mcp__browser__browser_navigate|mcp__browser__browser_evaluate)
     exit 0
     ;;
+  # モバイル（読み取り・情報取得系）
+  mcp__mobile__mobile_take_screenshot|mcp__mobile__mobile_save_screenshot|mcp__mobile__mobile_list_elements_on_screen|mcp__mobile__mobile_list_available_devices|mcp__mobile__mobile_get_screen_size|mcp__mobile__mobile_get_orientation|mcp__mobile__mobile_list_apps)
+    exit 0
+    ;;
   # Bashコマンド（内容で判定）
   Bash)
     # コマンド内容を取得
@@ -62,6 +66,7 @@ esac
 # 高リスク:
 #   デスクトップ: click, right_click, double_click, type, key, hotkey, scroll, open_app
 #   ブラウザ: click, type
+#   モバイル: click, tap, swipe, type, press_button, launch_app, install_app, uninstall_app, set_orientation, open_url
 #   Bash: 危険コマンド
 #   Write, Edit
 

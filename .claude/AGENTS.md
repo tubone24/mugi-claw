@@ -64,6 +64,12 @@
 - `mobile_press_button`: ハードウェアボタン（HOME, BACK, VOLUME等）
 - `mobile_open_url`: URL をデバイスブラウザで開く
 
+### モバイル補助ツール（mcp__mobile_extra__）— Slack連携 & Simulator管理
+- `mobile_screenshot_slack`: iOS Simulatorスクリーンショット撮影 + Slackスレッド自動アップロード
+- `mobile_simulator_boot`: iOS Simulator起動（UDID指定 or 自動選択）
+- `mobile_simulator_shutdown`: 起動中のiOS Simulator停止
+- `mobile_simulator_list_devices`: 利用可能なiOS Simulatorデバイス一覧
+
 ### タスク管理（Claude Code 組み込み）
 - `TaskCreate`: タスクの作成
 - `TaskUpdate`: タスクの更新

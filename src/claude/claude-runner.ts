@@ -31,6 +31,11 @@ const DEFAULT_ALLOWED_TOOLS = [
   'mcp__mobile__mobile_swipe_on_screen',
   'mcp__mobile__mobile_type_keys', 'mcp__mobile__mobile_press_button',
   'mcp__mobile__mobile_open_url',
+  // Mobile extra (mugi-claw補助)
+  'mcp__mobile_extra__mobile_screenshot_slack',
+  'mcp__mobile_extra__mobile_simulator_boot',
+  'mcp__mobile_extra__mobile_simulator_shutdown',
+  'mcp__mobile_extra__mobile_simulator_list_devices',
   'TaskCreate', 'TaskUpdate', 'TaskGet', 'TaskList', 'TaskStop', 'TaskOutput',
   'Skill', 'CronCreate', 'CronDelete', 'CronList',
 ];

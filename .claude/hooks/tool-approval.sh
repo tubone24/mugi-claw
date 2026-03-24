@@ -35,6 +35,10 @@ case "$TOOL_NAME" in
   mcp__mobile__mobile_take_screenshot|mcp__mobile__mobile_save_screenshot|mcp__mobile__mobile_list_elements_on_screen|mcp__mobile__mobile_list_available_devices|mcp__mobile__mobile_get_screen_size|mcp__mobile__mobile_get_orientation|mcp__mobile__mobile_list_apps)
     exit 0
     ;;
+  # モバイル補助（読み取り系）
+  mcp__mobile_extra__mobile_screenshot_slack|mcp__mobile_extra__mobile_simulator_list_devices)
+    exit 0
+    ;;
   # Bashコマンド（内容で判定）
   Bash)
     # コマンド内容を取得

@@ -60,10 +60,17 @@ export class TaskRunner {
       return await new Promise((resolve) => {
         const runner = this.claudeRunner.run(taskPrompt, undefined, model, undefined, { allowAllTools: true });
 
+        // Claude CLI stream-json の result フィールドが空になるバグ対策
+        let accumulatedText = '';
+        runner.on('text', (ev) => {
+          accumulatedText += ev.message;
+        });
+
         runner.on('result', (ev) => {
-          this.taskStore.finishRun(runId, 'success', ev.result, undefined, ev.cost_usd, ev.duration_ms);
+          const resultText = ev.result || accumulatedText;
+          this.taskStore.finishRun(runId, 'success', resultText, undefined, ev.cost_usd, ev.duration_ms);
           this.logger.info({ taskId: task.id, runId, cost: ev.cost_usd }, 'スケジュールタスク完了');
-          resolve({ success: true, result: ev.result, costUsd: ev.cost_usd, durationMs: ev.duration_ms });
+          resolve({ success: true, result: resultText, costUsd: ev.cost_usd, durationMs: ev.duration_ms });
         });
 
         runner.on('error', (err) => {

@@ -119,6 +119,9 @@ export function registerMentionHandler(
 
       // 8. ストリームイベント橋渡し
       const writtenFiles: string[] = [];
+      // Claude CLI stream-json の result フィールドが空になるバグ対策
+      // (GitHub Issue #7124, #8126) - text イベントからテキストを蓄積してフォールバック
+      let accumulatedText = '';
 
       runner.on('system_init', (ev) => {
         sessionManager.saveSession(threadTs, event.channel, ev.session_id);
@@ -141,6 +144,7 @@ export function registerMentionHandler(
       // desktop_screenshotはMCPサーバー内で直接Slackにアップロードされる
 
       runner.on('text', async (ev) => {
+        accumulatedText += ev.message;
         await threadManager.updateProgress({
           type: 'text',
           content: ev.message,
@@ -155,8 +159,9 @@ export function registerMentionHandler(
       });
 
       runner.on('result', async (ev) => {
-        // 構造化出力をパース
-        const parsed = parseClaudeResult(ev.result);
+        // 構造化出力をパース（result が空の場合は蓄積テキストをフォールバック）
+        const resultText = ev.result || accumulatedText;
+        const parsed = parseClaudeResult(resultText);
 
         // メモリ保存
         for (const mem of parsed.newMemories) {

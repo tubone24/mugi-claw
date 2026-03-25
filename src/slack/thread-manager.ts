@@ -78,6 +78,8 @@ export class ThreadManager {
 
     // 結果を新規メッセージで投稿（長文は分割）
     const converted = convertMarkdown(result);
+    if (!converted.trim()) return; // 空結果は投稿しない
+
     const chunks = this.splitMessage(converted);
 
     for (const chunk of chunks) {

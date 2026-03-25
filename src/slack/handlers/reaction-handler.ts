@@ -162,6 +162,9 @@ export function registerReactionHandler(
       const runner = claudeRunner.run(prompt, undefined, model, { channel, threadTs });
 
       // 11. ストリームイベント処理
+      // Claude CLI stream-json の result フィールドが空になるバグ対策
+      let accumulatedText = '';
+
       runner.on('tool_use', async (ev) => {
         await threadManager.updateProgress({
           type: 'tool_use',
@@ -171,6 +174,7 @@ export function registerReactionHandler(
       });
 
       runner.on('text', async (ev) => {
+        accumulatedText += ev.message;
         await threadManager.updateProgress({
           type: 'text',
           content: ev.message,
@@ -178,8 +182,8 @@ export function registerReactionHandler(
       });
 
       runner.on('result', async (ev) => {
-        // 構造化出力パースはスキップ（リアクショントリガーは決められたタスク実行なので不要）
-        await threadManager.postResult(ev.result);
+        const resultText = ev.result || accumulatedText;
+        await threadManager.postResult(resultText);
 
         logger.info({
           emoji: event.reaction,

@@ -51,7 +51,7 @@
 - `mobile_uninstall_app`: アプリ削除
 
 #### 画面操作
-- `mobile_take_screenshot`: スクリーンショット撮影
+- `mobile_take_screenshot`: **使用禁止** — 代わりに `mcp__mobile_extra__mobile_screenshot_slack` を使うこと（Slack自動アップロード対応）
 - `mobile_save_screenshot`: スクリーンショットをファイル保存
 - `mobile_list_elements_on_screen`: UI要素一覧（座標・属性付き）
 - `mobile_click_on_screen_at_coordinates`: 座標タップ
@@ -84,8 +84,8 @@
 - ブラウザ操作には必ずMCPブラウザツールを使用する（Bash経由のCDP操作は禁止）
 - デスクトップ操作には必ずMCPデスクトップツールを使用する
 - Android Emulator操作には必ずMCPモバイルツール（mcp__mobile__）を使用する
-- モバイルのスクリーンショットはLLMコンテキストに入るが、Slackへの自動アップロードは未対応（Phase 2で対応予定）
-- スクリーンショットはSlackに自動アップロードされるため、手動アップロード不要
+- **モバイルのスクリーンショットは `mcp__mobile_extra__mobile_screenshot_slack` を使うこと**（`mcp__mobile__mobile_take_screenshot` はSlack連携なし、tool-approvalで拒否される）
+- スクリーンショットは `mobile_screenshot_slack` 経由でSlackに自動アップロードされるため、手動アップロード不要
 - **パスワード・OTP等の機密情報の入力には必ず `browser_secure_input`（ブラウザ）または `mobile_secure_input`（エミュレータ）を使う。`browser_type` や `mobile_type_keys` でパスワードを直接入力してはならない**
 
 ## Slack操作ルール（重要）

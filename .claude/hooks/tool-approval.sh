@@ -31,8 +31,13 @@ case "$TOOL_NAME" in
   mcp__browser__browser_screenshot|mcp__browser__browser_get_text|mcp__browser__browser_wait|mcp__browser__browser_navigate|mcp__browser__browser_evaluate)
     exit 0
     ;;
+  # モバイル: mobile_take_screenshot はSlack連携なし → 拒否して mobile_screenshot_slack に誘導
+  mcp__mobile__mobile_take_screenshot)
+    echo "このツールはSlackへの自動アップロードに対応していません。代わりに mcp__mobile_extra__mobile_screenshot_slack を使用してください。" >&2
+    exit 2
+    ;;
   # モバイル（読み取り・情報取得系）
-  mcp__mobile__mobile_take_screenshot|mcp__mobile__mobile_save_screenshot|mcp__mobile__mobile_list_elements_on_screen|mcp__mobile__mobile_list_available_devices|mcp__mobile__mobile_get_screen_size|mcp__mobile__mobile_get_orientation|mcp__mobile__mobile_list_apps)
+  mcp__mobile__mobile_save_screenshot|mcp__mobile__mobile_list_elements_on_screen|mcp__mobile__mobile_list_available_devices|mcp__mobile__mobile_get_screen_size|mcp__mobile__mobile_get_orientation|mcp__mobile__mobile_list_apps)
     exit 0
     ;;
   # モバイル補助（読み取り系）

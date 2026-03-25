@@ -76,17 +76,21 @@ async function main() {
     logger.info({ port: config.network.proxyPort }, 'Network proxy started');
 
     proxyServer.setOnDenied(async (hostname, port) => {
+      const target = port === 443 ? hostname : `${hostname}:${port}`;
       try {
-        const target = port === 443 ? hostname : `${hostname}:${port}`;
         const dm = await app.client.conversations.open({ users: config.owner.slackUserId });
-        if (dm.channel?.id) {
-          await app.client.chat.postMessage({
-            channel: dm.channel.id,
-            text: `:no_entry: ネットワークアクセスがブロックされたわん\nHost: \`${target}\`\nホワイトリストに追加するには Home タブから設定してわん`,
-          });
+        if (!dm.channel?.id) {
+          logger.warn({ hostname, port, slackUserId: config.owner.slackUserId }, 'DM channel open failed - no channel ID');
+          return;
         }
+        await app.client.chat.postMessage({
+          channel: dm.channel.id,
+          text: `:no_entry: ネットワークアクセスがブロックされたわん\nHost: \`${target}\`\nホワイトリストに追加するには Home タブから設定してわん`,
+        });
+        logger.debug({ hostname, port }, 'Network denied DM sent');
       } catch (err) {
         logger.error({ err, hostname, port }, 'Failed to send denied notification DM');
+        throw err; // notifyDenied のクールダウンクリアのために再throw
       }
     });
   }

@@ -15,7 +15,7 @@ export class ProxyServer {
   private sessionContext: SessionContext | null = null;
   private activeConnections = 0;
   private readonly MAX_CONNECTIONS = 50;
-  private onDeniedCallback?: (hostname: string, port: number) => void;
+  private onDeniedCallback?: (hostname: string, port: number) => Promise<void> | void;
   private deniedNotifyTimes = new Map<string, number>();
   private readonly NOTIFY_COOLDOWN_MS = 60_000; // 1 minute cooldown per host
 
@@ -40,7 +40,7 @@ export class ProxyServer {
     this.sessionContext = null;
   }
 
-  setOnDenied(callback: (hostname: string, port: number) => void): void {
+  setOnDenied(callback: (hostname: string, port: number) => Promise<void> | void): void {
     this.onDeniedCallback = callback;
   }
 
@@ -80,7 +80,12 @@ export class ProxyServer {
 
     this.logger.debug({ hostname, port, method: 'CONNECT' }, 'Proxy CONNECT request');
 
-    const allowed = await this.checkOrApprove(hostname, port);
+    let allowed = false;
+    try {
+      allowed = await this.checkOrApprove(hostname, port);
+    } catch (err) {
+      this.logger.error({ err, hostname, port }, 'checkOrApprove error - denying');
+    }
 
     if (!allowed) {
       this.logger.warn({ hostname, port }, 'Network access denied');
@@ -149,7 +154,12 @@ export class ProxyServer {
 
     this.logger.debug({ hostname, port, method: req.method, url: req.url }, 'Proxy HTTP request');
 
-    const allowed = await this.checkOrApprove(hostname, port);
+    let allowed = false;
+    try {
+      allowed = await this.checkOrApprove(hostname, port);
+    } catch (err) {
+      this.logger.error({ err, hostname, port }, 'checkOrApprove error - denying');
+    }
 
     if (!allowed) {
       this.logger.warn({ hostname, port }, 'Network access denied');
@@ -201,7 +211,15 @@ export class ProxyServer {
     const last = this.deniedNotifyTimes.get(key);
     if (last && now - last < this.NOTIFY_COOLDOWN_MS) return;
     this.deniedNotifyTimes.set(key, now);
-    this.onDeniedCallback?.(hostname, port);
+
+    const result = this.onDeniedCallback?.(hostname, port);
+    // コールバックが失敗した場合、クールダウンをクリアして次回リトライ可能にする
+    if (result instanceof Promise) {
+      result.catch((err) => {
+        this.logger.warn({ err, hostname, port }, 'Denied notification callback failed - clearing cooldown');
+        this.deniedNotifyTimes.delete(key);
+      });
+    }
   }
 
   private async checkOrApprove(hostname: string, port: number): Promise<boolean> {

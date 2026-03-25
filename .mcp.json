@@ -13,11 +13,17 @@
     },
     "mobile": {
       "command": "npx",
-      "args": ["-y", "@mobilenext/mobile-mcp@latest"]
+      "args": ["-y", "@mobilenext/mobile-mcp@latest"],
+      "env": {
+        "ANDROID_SDK_ROOT": "/usr/local/share/android-commandlinetools"
+      }
     },
     "mobile_extra": {
       "command": "node",
-      "args": ["dist/mobile/mcp-server.js"]
+      "args": ["dist/mobile/mcp-server.js"],
+      "env": {
+        "ANDROID_SDK_ROOT": "/usr/local/share/android-commandlinetools"
+      }
     }
   }
 }

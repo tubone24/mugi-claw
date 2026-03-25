@@ -4,108 +4,138 @@ import type { Logger } from 'pino';
 
 const execFileAsync = promisify(execFile);
 
-export interface SimDevice {
-  udid: string;
+export interface EmulatorDevice {
+  id: string;
   name: string;
   state: string;
-  runtime: string;
+  platform: 'android';
 }
 
-interface SimctlDevice {
-  udid: string;
-  name: string;
-  state: string;
-  isAvailable: boolean;
+const ANDROID_SDK_ROOT =
+  process.env['ANDROID_SDK_ROOT'] ??
+  process.env['ANDROID_HOME'] ??
+  '/usr/local/share/android-commandlinetools';
+
+function adbPath(): string {
+  return process.env['ADB_PATH'] ?? 'adb';
 }
 
-interface SimctlListResult {
-  devices: Record<string, SimctlDevice[]>;
+function emulatorPath(): string {
+  return `${ANDROID_SDK_ROOT}/emulator/emulator`;
 }
 
-export class SimulatorManager {
+export class EmulatorManager {
   constructor(private logger: Logger) {}
 
-  /** 利用可能なデバイス一覧を取得 */
-  async listDevices(): Promise<SimDevice[]> {
-    const { stdout } = await execFileAsync('xcrun', ['simctl', 'list', 'devices', '--json']);
-    const result = JSON.parse(stdout) as SimctlListResult;
-    const devices: SimDevice[] = [];
+  /** 利用可能なAVD一覧を取得 */
+  async listAvds(): Promise<string[]> {
+    const { stdout } = await execFileAsync(emulatorPath(), ['-list-avds']);
+    return stdout
+      .trim()
+      .split('\n')
+      .filter((l) => l.trim().length > 0);
+  }
 
-    for (const [runtime, deviceList] of Object.entries(result.devices)) {
-      for (const device of deviceList) {
-        if (device.isAvailable) {
-          devices.push({
-            udid: device.udid,
-            name: device.name,
-            state: device.state,
-            runtime: runtime.replace('com.apple.CoreSimulator.SimRuntime.', ''),
-          });
-        }
+  /** 接続中デバイス一覧を取得 */
+  async listDevices(): Promise<EmulatorDevice[]> {
+    const { stdout } = await execFileAsync(adbPath(), ['devices', '-l']);
+    const devices: EmulatorDevice[] = [];
+
+    for (const line of stdout.split('\n')) {
+      const match = line.match(/^([\w\-.:]+)\s+device\s+(.*)$/);
+      if (!match?.[1]) continue;
+
+      const id = match[1];
+      const props = match[2] ?? '';
+
+      // デバイス名を取得
+      let name = id;
+      const modelMatch = props.match(/model:(\S+)/);
+      if (modelMatch?.[1]) {
+        name = modelMatch[1].replace(/_/g, ' ');
       }
+
+      devices.push({
+        id,
+        name,
+        state: 'online',
+        platform: 'android',
+      });
     }
 
     return devices;
   }
 
-  /** デバイスを起動 */
-  async boot(udid?: string): Promise<string> {
-    const target = udid ?? (await this.findDefaultDevice());
+  /** エミュレータを起動 */
+  async boot(avdName?: string): Promise<string> {
+    const target = avdName ?? (await this.findDefaultAvd());
     if (!target) {
-      throw new Error('利用可能な iOS Simulator が見つからない');
+      throw new Error('利用可能な Android AVD が見つからない');
     }
 
+    // 既に起動中か確認
     const devices = await this.listDevices();
-    const device = devices.find((d) => d.udid === target);
-    if (device?.state === 'Booted') {
-      this.logger.info({ udid: target, name: device.name }, 'Simulator は既に起動中');
+    if (devices.some((d) => d.id.startsWith('emulator-'))) {
+      this.logger.info('Emulator は既に起動中');
       return target;
     }
 
-    this.logger.info({ udid: target }, 'Simulator 起動中...');
-    await execFileAsync('xcrun', ['simctl', 'boot', target]);
+    this.logger.info({ avd: target }, 'Emulator 起動中...');
+    const child = execFile(
+      emulatorPath(),
+      ['-avd', target, '-no-snapshot-load', '-gpu', 'auto'],
+      { timeout: 0 },
+    );
+    child.unref();
 
-    // Simulator.app も開く
-    await execFileAsync('open', ['-a', 'Simulator', '--args', '-CurrentDeviceUDID', target]);
+    // 起動待ち（最大60秒）
+    for (let i = 0; i < 30; i++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      try {
+        const { stdout } = await execFileAsync(adbPath(), [
+          'shell',
+          'getprop',
+          'sys.boot_completed',
+        ]);
+        if (stdout.trim() === '1') {
+          this.logger.info({ avd: target }, 'Emulator 起動完了');
+          return target;
+        }
+      } catch {
+        // まだ起動中
+      }
+    }
 
-    this.logger.info({ udid: target }, 'Simulator 起動完了');
-    return target;
+    throw new Error(`Emulator 起動タイムアウト: ${target}`);
   }
 
-  /** 起動中のシミュレータを停止 */
+  /** 起動中のエミュレータを停止 */
   async shutdown(): Promise<void> {
     try {
-      await execFileAsync('xcrun', ['simctl', 'shutdown', 'booted']);
-      this.logger.info('Simulator 停止');
+      await execFileAsync(adbPath(), ['emu', 'kill']);
+      this.logger.info('Emulator 停止');
     } catch {
-      this.logger.info('停止する Simulator なし');
+      this.logger.info('停止する Emulator なし');
     }
   }
 
   /** 起動中かチェック */
   async isBooted(): Promise<boolean> {
     const devices = await this.listDevices();
-    return devices.some((d) => d.state === 'Booted');
+    return devices.some((d) => d.id.startsWith('emulator-'));
   }
 
-  /** 起動中のデバイスUDIDを取得 */
-  async getBootedDeviceUdid(): Promise<string | null> {
-    const devices = await this.listDevices();
-    return devices.find((d) => d.state === 'Booted')?.udid ?? null;
-  }
+  /** デフォルトAVDを探す（PlayStore付き優先） */
+  private async findDefaultAvd(): Promise<string | null> {
+    const avds = await this.listAvds();
+    if (avds.length === 0) return null;
 
-  /** デフォルトデバイスを探す（iPhone優先） */
-  private async findDefaultDevice(): Promise<string | null> {
-    const devices = await this.listDevices();
+    // PlayStore付きを優先
+    const playStore = avds.find((a) =>
+      a.toLowerCase().includes('playstore'),
+    );
+    if (playStore) return playStore;
 
-    // 既に起動中のデバイスがあればそれを返す
-    const booted = devices.find((d) => d.state === 'Booted');
-    if (booted) return booted.udid;
-
-    // iPhone を優先的に探す
-    const iphone = devices.find((d) => d.name.includes('iPhone') && d.runtime.includes('iOS'));
-    if (iphone) return iphone.udid;
-
-    // 何でもいいので返す
-    return devices[0]?.udid ?? null;
+    return avds[0] ?? null;
   }
 }

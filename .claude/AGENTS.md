@@ -36,18 +36,18 @@
 - `desktop_get_screen_info`: 画面情報取得
 - `desktop_wait`: 待機
 
-### モバイル操作（mcp__mobile__）— iOS Simulator
+### モバイル操作（mcp__mobile__）— Android Emulator
 #### デバイス管理
-- `mobile_list_available_devices`: 接続済みのシミュレータ・デバイス一覧
+- `mobile_list_available_devices`: 接続済みのエミュレータ・デバイス一覧
 - `mobile_get_screen_size`: 画面サイズ取得
 - `mobile_get_orientation`: 画面向き取得
 - `mobile_set_orientation`: 画面向き変更（portrait/landscape）
 
 #### アプリ管理
 - `mobile_list_apps`: インストール済みアプリ一覧
-- `mobile_launch_app`: アプリ起動（バンドルID指定）
+- `mobile_launch_app`: アプリ起動（パッケージ名指定）
 - `mobile_terminate_app`: アプリ終了
-- `mobile_install_app`: アプリインストール（.app/.ipa/.zip）
+- `mobile_install_app`: アプリインストール（.apk）
 - `mobile_uninstall_app`: アプリ削除
 
 #### 画面操作
@@ -64,11 +64,12 @@
 - `mobile_press_button`: ハードウェアボタン（HOME, BACK, VOLUME等）
 - `mobile_open_url`: URL をデバイスブラウザで開く
 
-### モバイル補助ツール（mcp__mobile_extra__）— Slack連携 & Simulator管理
-- `mobile_screenshot_slack`: iOS Simulatorスクリーンショット撮影 + Slackスレッド自動アップロード
-- `mobile_simulator_boot`: iOS Simulator起動（UDID指定 or 自動選択）
-- `mobile_simulator_shutdown`: 起動中のiOS Simulator停止
-- `mobile_simulator_list_devices`: 利用可能なiOS Simulatorデバイス一覧
+### モバイル補助ツール（mcp__mobile_extra__）— Slack連携 & Emulator管理 & セキュア入力
+- `mobile_screenshot_slack`: Android Emulatorスクリーンショット撮影 + Slackスレッド自動アップロード
+- `mobile_secure_input`: 機密情報（パスワード・OTP等）の安全な入力。ローカルWebフォーム経由でユーザーに入力してもらい、adb shell input でエミュレータに送信。LLMコンテキストに機密情報は載らない
+- `mobile_emulator_boot`: Android Emulator起動（AVD名指定 or 自動選択）
+- `mobile_emulator_shutdown`: 起動中のAndroid Emulator停止
+- `mobile_emulator_list_devices`: 利用可能なAndroid Emulator AVD一覧
 
 ### タスク管理（Claude Code 組み込み）
 - `TaskCreate`: タスクの作成
@@ -82,10 +83,10 @@
 - 上記MCPツールおよびタスク管理・Cron管理ツールはすべて利用許可済み。許可を求めたり確認せず、直接呼び出す
 - ブラウザ操作には必ずMCPブラウザツールを使用する（Bash経由のCDP操作は禁止）
 - デスクトップ操作には必ずMCPデスクトップツールを使用する
-- iOS Simulator操作には必ずMCPモバイルツール（mcp__mobile__）を使用する
+- Android Emulator操作には必ずMCPモバイルツール（mcp__mobile__）を使用する
 - モバイルのスクリーンショットはLLMコンテキストに入るが、Slackへの自動アップロードは未対応（Phase 2で対応予定）
 - スクリーンショットはSlackに自動アップロードされるため、手動アップロード不要
-- **パスワード・OTP等の機密情報の入力には必ず `browser_secure_input` を使う。`browser_type` でパスワードを直接入力してはならない**
+- **パスワード・OTP等の機密情報の入力には必ず `browser_secure_input`（ブラウザ）または `mobile_secure_input`（エミュレータ）を使う。`browser_type` や `mobile_type_keys` でパスワードを直接入力してはならない**
 
 ## Slack操作ルール（重要）
 

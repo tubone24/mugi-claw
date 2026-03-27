@@ -1,4 +1,4 @@
-# mugi-claw
+# mugi-claw(むぎ苦労）
 
 A Slack-resident AI assistant powered by [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code). Delegates tasks via `@mention`, streams real-time progress to threads, and operates browser UIs through Playwright + Chrome DevTools Protocol — accessing Gmail, Google Drive, Google Photos, and more without API keys.
 

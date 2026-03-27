@@ -1062,6 +1062,31 @@ launchd/
 └── com.mugi-claw.plist         # macOS persistent service config
 ```
 
+## Important Notice
+
+> [!CAUTION]
+> **Terms of Service Compliance**
+>
+> mugi-claw wraps the Claude Code CLI and operates through Slack. You must comply with the [Anthropic Consumer Terms of Service](https://www.anthropic.com/legal/consumer-terms) when using this project.
+>
+> ### Personal workspace only
+>
+> The Consumer Terms of Service prohibit account sharing:
+>
+> > *You may not share your Account login information, Anthropic API key, or Account credentials with anyone else. You also may not make your Account available to anyone else.*
+>
+> Because mugi-claw runs on Slack, any member in the workspace could access AI through a single subscription, which violates this clause. **You must run mugi-claw in a personal workspace only and ensure no other users can access it.**
+>
+> ### OAuth token handling
+>
+> [Legal and Compliance](https://docs.anthropic.com/en/docs/claude-code/legal-and-compliance) prohibits using OAuth tokens outside of Claude Code. mugi-claw does not extract OAuth tokens — it spawns the Claude Code CLI directly via `child_process.spawn()`. However, this structure could potentially be interpreted as "providing Claude Code through a separate product."
+>
+> ### Disclaimer
+>
+> - Interpretation of the terms is at Anthropic's sole discretion
+> - The terms may change at any time — review them regularly
+> - The author assumes no liability for any issues arising from the use of this project
+
 ## License
 
 Private project. All rights reserved.

@@ -26,6 +26,7 @@ import { registerApprovalHandlers } from './approval/register-handlers.js';
 import { WhitelistStore } from './network/whitelist-store.js';
 import { NetworkApprovalManager } from './network/network-approval.js';
 import { ProxyServer } from './network/proxy-server.js';
+import { UsageMonitor } from './usage/usage-monitor.js';
 import pino from 'pino';
 
 const config = loadConfig();
@@ -103,11 +104,14 @@ async function main() {
   // 6. ProfileOnboarding作成
   const profileOnboarding = new ProfileOnboarding(app.client, profileStore, logger);
 
+  // 6.5. UsageMonitor 初期化
+  const usageMonitor = new UsageMonitor(app.client, logger);
+
   // 7. ハンドラー登録
   registerMentionHandler(app, config, logger, profileStore, profileOnboarding, settingsStore, taskStore, scheduler, listStore, reactionTriggerStore);
   registerCommandHandler(app, profileStore, taskStore, scheduler, reactionTriggerStore, settingsStore, listStore, logger, config.owner.slackUserId);
   registerReactionHandler(app, config, logger, reactionTriggerStore, settingsStore);
-  registerHomeTabHandler(app, config, profileStore, taskStore, scheduler, settingsStore, whitelistStore, listStore, logger);
+  registerHomeTabHandler(app, config, profileStore, taskStore, scheduler, settingsStore, whitelistStore, listStore, logger, usageMonitor);
 
   // 8. Block Kit インタラクション（プロフィールオンボーディング）
   app.action('profile_submit', async ({ ack, body, client }) => {
@@ -359,6 +363,7 @@ async function main() {
 
   // 9. App起動
   await app.start();
+  usageMonitor.start();
   logger.info('mugi-claw 起動完了わん！ 🐕');
 
   // 9.5. 起動通知をオーナーに送信
@@ -389,6 +394,7 @@ async function main() {
   // 11. graceful shutdown
   const shutdown = async () => {
     logger.info('mugi-claw を停止するわん...');
+    usageMonitor.stop();
     scheduler.shutdown();
     if (proxyServer) await proxyServer.stop();
     await credentialServer.stop();

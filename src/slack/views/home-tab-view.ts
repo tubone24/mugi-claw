@@ -1,6 +1,7 @@
 import type { KnownBlock, View } from '@slack/types';
 import type { ScheduledTask, TaskRun, UserProfile, WhitelistEntry, UserList, ListItem } from '../../types.js';
 import type { ClaudeModel } from '../../db/settings-store.js';
+import type { UsageDisplayData } from '../../usage/usage-monitor.js';
 
 export interface HomeTabData {
   profile: UserProfile | null;
@@ -12,6 +13,7 @@ export interface HomeTabData {
   logLevel?: string;
   whitelistPage?: number;
   userLists?: { list: UserList; items: ListItem[] }[];
+  usageData?: UsageDisplayData | null;
 }
 
 export const WHITELIST_PAGE_SIZE = 15;
@@ -20,6 +22,12 @@ export function buildHomeTabView(data: HomeTabData): View {
   const blocks: KnownBlock[] = [];
 
   blocks.push(...buildHeader());
+
+  if (data.isOwner && data.usageData !== undefined) {
+    blocks.push({ type: 'divider' });
+    blocks.push(...buildUsageSection(data.usageData));
+  }
+
   blocks.push({ type: 'divider' });
   blocks.push(...buildProfileSection(data.profile));
   blocks.push({ type: 'divider' });
@@ -389,4 +397,133 @@ function buildAdminSection(whitelist: WhitelistEntry[], logLevel: string, page: 
   }
 
   return blocks;
+}
+
+// ─── Usage Section ───────────────────────────────────────────
+
+function buildUsageSection(data: UsageDisplayData | null): KnownBlock[] {
+  const blocks: KnownBlock[] = [
+    {
+      type: 'section',
+      text: { type: 'mrkdwn', text: '*:bar_chart: Claude Code 利用率*' },
+    },
+  ];
+
+  if (!data) {
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: ':warning: _利用率データが取得できていないわん。Claude Code セッションが起動していないかもわん。_' },
+    });
+    return blocks;
+  }
+
+  if (data.isStale) {
+    blocks.push({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: `:warning: データが古いわん（${formatAge(data.cacheAge)}前に更新）` }],
+    });
+  }
+
+  // 5-hour window
+  const fiveHourUtil = data.fiveHour.utilization ?? 0;
+  blocks.push({
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: `*5時間枠:* ${buildProgressBar(fiveHourUtil)} *${fiveHourUtil.toFixed(1)}%*${fiveHourUtil >= 80 ? ' :warning:' : ''}`,
+    },
+  });
+  if (data.fiveHour.resets_at) {
+    blocks.push({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: `リセット: ${formatResetTime(data.fiveHour.resets_at)}` }],
+    });
+  }
+
+  // 7-day window
+  const sevenDayUtil = data.sevenDay.utilization ?? 0;
+  blocks.push({
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: `*7日間枠:* ${buildProgressBar(sevenDayUtil)} *${sevenDayUtil.toFixed(1)}%*${sevenDayUtil >= 80 ? ' :warning:' : ''}`,
+    },
+  });
+  if (data.sevenDay.resets_at) {
+    blocks.push({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: `リセット: ${formatResetTime(data.sevenDay.resets_at)}` }],
+    });
+  }
+
+  // 7-day Sonnet (optional)
+  if (data.sevenDaySonnet) {
+    const sonnetUtil = data.sevenDaySonnet.utilization ?? 0;
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*7日間枠 (Sonnet):* ${buildProgressBar(sonnetUtil)} *${sonnetUtil.toFixed(1)}%*`,
+      },
+    });
+  }
+
+  // Extra usage (optional)
+  if (data.extraUsage?.is_enabled) {
+    const used = data.extraUsage.used_credits;
+    const limit = data.extraUsage.monthly_limit;
+    const pct = limit > 0 ? (used / limit) * 100 : 0;
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*追加利用:* $${used.toFixed(2)} / $${limit.toFixed(0)} (${pct.toFixed(1)}%)`,
+      },
+    });
+  }
+
+  // High usage alert
+  const maxUtil = Math.max(fiveHourUtil, sevenDayUtil);
+  if (maxUtil >= 95) {
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: ':rotating_light: *レート制限に近づいているわん！* Bot プレゼンスを Away に切り替えたわん。',
+      },
+    });
+  }
+
+  return blocks;
+}
+
+function buildProgressBar(percent: number): string {
+  const filled = Math.round(percent / 10);
+  const empty = 10 - filled;
+  const filledChar = percent >= 80 ? ':red_square:' : percent >= 50 ? ':large_orange_square:' : ':large_green_square:';
+  return filledChar.repeat(filled) + ':white_large_square:'.repeat(empty);
+}
+
+function formatResetTime(isoString: string): string {
+  try {
+    const date = new Date(isoString);
+    return date.toLocaleString('ja-JP', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Asia/Tokyo',
+    });
+  } catch {
+    return isoString;
+  }
+}
+
+function formatAge(ms: number): string {
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds}秒`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}分`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}時間`;
 }

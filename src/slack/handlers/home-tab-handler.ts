@@ -7,6 +7,7 @@ import type { Scheduler } from '../../scheduler/scheduler.js';
 import type { SettingsStore, ClaudeModel } from '../../db/settings-store.js';
 import type { WhitelistStore } from '../../network/whitelist-store.js';
 import type { ListStore } from '../list-store.js';
+import type { UsageMonitor } from '../../usage/usage-monitor.js';
 import { buildHomeTabView } from '../views/home-tab-view.js';
 import { buildSettingsModal, SETTINGS_MODAL_CALLBACK_ID } from '../views/settings-modal.js';
 import { buildScheduleModal } from './commands/schedule-modal.js';
@@ -22,6 +23,7 @@ export function registerHomeTabHandler(
   whitelistStore: WhitelistStore | null,
   listStore: ListStore,
   logger: Logger,
+  usageMonitor: UsageMonitor | null = null,
 ): void {
 
   // Track whitelist page per user (in-memory, resets on restart)
@@ -52,6 +54,7 @@ export function registerHomeTabHandler(
         logLevel: isOwner ? (settingsStore.get('log_level') ?? config.logLevel) : undefined,
         whitelistPage: isOwner ? (whitelistPageMap.get(userId) ?? 0) : undefined,
         userLists,
+        usageData: isOwner ? (usageMonitor?.getUsageData() ?? null) : undefined,
       };
 
       const view = buildHomeTabView(data);

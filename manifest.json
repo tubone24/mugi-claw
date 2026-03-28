@@ -46,7 +46,8 @@
         "canvases:write",
         "canvases:read",
         "bookmarks:write",
-        "bookmarks:read"
+        "bookmarks:read",
+        "users:write"
       ],
       "user": [
         "search:read"
